@@ -1,10 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { BookOpen, CheckCircle2, Headphones, Mic, PencilLine, QrCode, Sparkles, Star } from "lucide-react";
+import { Headphones, LogOut, Mic, QrCode, Sparkles, Star, UserRound } from "lucide-react";
 import { appLessons } from "@/data/lessons";
-import { loadProgress, recordAnswer, recordSkill, saveProgress } from "@/lib/progress";
-import type { ChoiceQuestion, Lesson, Skill, StudentProgress } from "@/lib/types";
+import {
+  clearStudentSession,
+  loadProgress,
+  loadStudentSession,
+  recordAnswer,
+  recordSkill,
+  saveProgress,
+  saveStudentSession
+} from "@/lib/progress";
+import type { ChoiceQuestion, Lesson, Skill, StudentProgress, StudentSession } from "@/lib/types";
 
 type Screen = "home" | "map" | "story" | "vocab" | "listen" | "speak" | "read" | "write" | "review" | "progress";
 
@@ -24,29 +32,62 @@ const skillLabels: Record<Skill, string> = {
   write: "寫"
 };
 
+const avatars = ["⭐", "🚀", "🌈", "📚", "🎯", "🏆"];
+
 export function StudentApp() {
   const [screen, setScreen] = useState<Screen>("home");
   const [lessonId, setLessonId] = useState(appLessons[0].id);
+  const [student, setStudent] = useState<StudentSession | null>(null);
   const [progress, setProgress] = useState<StudentProgress | null>(null);
   const [showZh, setShowZh] = useState(true);
   const [speed, setSpeed] = useState(0.85);
   const lesson = useMemo(() => appLessons.find((item) => item.id === lessonId) || appLessons[0], [lessonId]);
 
   useEffect(() => {
-    setProgress(loadProgress());
+    const savedStudent = loadStudentSession();
+    if (savedStudent) {
+      setStudent(savedStudent);
+      setProgress(loadProgress(savedStudent.id));
+    }
   }, []);
 
   useEffect(() => {
-    if (progress) saveProgress(progress);
-  }, [progress]);
+    if (student && progress) saveProgress(progress, student.id);
+  }, [progress, student]);
 
-  if (!progress) return null;
+  function loginStudent(name: string, code: string, avatar: string) {
+    const cleanName = name.trim();
+    const cleanCode = code.trim().replace(/\s+/g, "").toUpperCase();
+    const nextStudent: StudentSession = {
+      id: cleanCode.toLowerCase(),
+      name: cleanName,
+      code: cleanCode,
+      avatar,
+      loginAt: new Date().toISOString()
+    };
+    saveStudentSession(nextStudent);
+    setStudent(nextStudent);
+    setProgress(loadProgress(nextStudent.id));
+    setScreen("home");
+  }
 
+  function logoutStudent() {
+    clearStudentSession();
+    setStudent(null);
+    setProgress(null);
+    setScreen("home");
+  }
+
+  if (!student || !progress) {
+    return <StudentLogin onLogin={loginStudent} />;
+  }
+
+  const activeStudent = student;
   const lessonSkills = progress.completedSkills[lesson.id] || [];
 
   function mutateProgress(mutator: (draft: StudentProgress) => void) {
     setProgress((current) => {
-      const next = structuredClone(current || loadProgress());
+      const next = structuredClone(current || loadProgress(activeStudent.id));
       mutator(next);
       return next;
     });
@@ -81,6 +122,15 @@ export function StudentApp() {
             <p>迷你故事英文任務</p>
           </div>
         </div>
+
+        <div className="student-chip">
+          <span>{student.avatar}</span>
+          <div>
+            <strong>{student.name}</strong>
+            <small>學生代碼：{student.code}</small>
+          </div>
+        </div>
+
         <nav className="nav">
           {navItems.map((item) => (
             <button key={item.id} className={screen === item.id ? "active" : ""} onClick={() => setScreen(item.id)}>
@@ -89,7 +139,9 @@ export function StudentApp() {
           ))}
           <a className="btn secondary full" href="/qr"><QrCode size={18} /> QR Code</a>
           <a className="btn secondary full" href="/admin">教師後台</a>
+          <button className="btn secondary full" onClick={logoutStudent}><LogOut size={18} /> 切換學生</button>
         </nav>
+
         <div className="side-card">
           <strong>今日目標</strong>
           <p className="muted">完成故事、單字、聽說讀寫任務。</p>
@@ -116,7 +168,7 @@ export function StudentApp() {
                 <p className="eyebrow">Today&apos;s Story Mission</p>
                 <h3>{lesson.title}</h3>
                 <p>
-                  今天跟著故事完成聽、說、讀、寫四個任務。每完成一個任務都會累積進度，全部完成後解鎖下一個故事。
+                  嗨，{student.name}！今天跟著故事完成聽、說、讀、寫四個任務。每完成一個任務都會累積進度，全部完成後解鎖下一個故事。
                 </p>
                 <div className="btns">
                   <button className="btn primary" onClick={() => setScreen("story")}><Sparkles size={18} /> 開始故事任務</button>
@@ -174,9 +226,76 @@ export function StudentApp() {
         {screen === "read" && <QuizTask lesson={lesson} skill="read" questions={lesson.read} speak={speak} onAnswer={answerQuestion} onDone={() => { completeSkill("read"); setScreen("write"); }} />}
         {screen === "write" && <WriteTask lesson={lesson} onDone={() => { completeSkill("write"); setScreen("progress"); }} />}
         {screen === "review" && <Review progress={progress} />}
-        {screen === "progress" && <Progress progress={progress} />}
+        {screen === "progress" && <Progress progress={progress} student={student} />}
       </main>
     </div>
+  );
+}
+
+function StudentLogin({ onLogin }: { onLogin: (name: string, code: string, avatar: string) => void }) {
+  const [name, setName] = useState("");
+  const [code, setCode] = useState("");
+  const [avatar, setAvatar] = useState(avatars[0]);
+  const [error, setError] = useState("");
+
+  function submitLogin(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!name.trim()) {
+      setError("請輸入學生姓名。");
+      return;
+    }
+    if (code.trim().replace(/\s+/g, "").length < 3) {
+      setError("學生代碼至少需要 3 個字，例如 S001。");
+      return;
+    }
+    setError("");
+    onLogin(name, code, avatar);
+  }
+
+  function demoLogin(studentName: string, studentCode: string, studentAvatar: string) {
+    setError("");
+    onLogin(studentName, studentCode, studentAvatar);
+  }
+
+  return (
+    <main className="login-page student-login-page">
+      <section className="login-card student-login-card">
+        <p className="eyebrow">Student Login</p>
+        <h2>學生登入</h2>
+        <p className="muted">輸入姓名和學生代碼，就可以保存自己的學習進度。小朋友不用 email，也不用記複雜密碼。</p>
+
+        <form className="form" onSubmit={submitLogin}>
+          <div className="field">
+            <label>學生姓名</label>
+            <input value={name} onChange={(event) => setName(event.target.value)} placeholder="例如：Amy" />
+          </div>
+          <div className="field">
+            <label>學生代碼</label>
+            <input value={code} onChange={(event) => setCode(event.target.value)} placeholder="例如：S001" />
+          </div>
+          <div className="field">
+            <label>選擇學習徽章</label>
+            <div className="avatar-grid">
+              {avatars.map((item) => (
+                <button type="button" className={avatar === item ? "avatar-choice active" : "avatar-choice"} key={item} onClick={() => setAvatar(item)}>
+                  {item}
+                </button>
+              ))}
+            </div>
+          </div>
+          {error && <p className="form-error">{error}</p>}
+          <button className="btn primary full" type="submit"><UserRound size={18} /> 進入學習</button>
+        </form>
+
+        <div className="demo-login">
+          <p className="muted">快速示範登入</p>
+          <div className="btns">
+            <button className="btn secondary" onClick={() => demoLogin("Amy", "S001", "⭐")}>Amy S001</button>
+            <button className="btn secondary" onClick={() => demoLogin("Ben", "S002", "🚀")}>Ben S002</button>
+          </div>
+        </div>
+      </section>
+    </main>
   );
 }
 
@@ -332,7 +451,7 @@ function SpeakTask({ lesson, speak, onDone }: { lesson: Lesson; speak: (text: st
   return (
     <section className="grid two">
       <article className="panel">
-        <div className="section-title"><h3>Speak 口說任務</h3><span className="pill">錄音回放可作第二階段接入</span></div>
+        <div className="section-title"><h3>Speak 口說任務</h3><span className="pill">AI 發音教練可作第二階段接入</span></div>
         {lesson.speak.map((task) => (
           <div className="task-card" key={task.id}>
             <p className="eyebrow">{task.prompt}</p>
@@ -400,7 +519,7 @@ function Review({ progress }: { progress: StudentProgress }) {
   );
 }
 
-function Progress({ progress }: { progress: StudentProgress }) {
+function Progress({ progress, student }: { progress: StudentProgress; student: StudentSession }) {
   const skillStats = (["listen", "speak", "read", "write"] as Skill[]).map((skill) => {
     const answers = progress.answers.filter((item) => item.skill === skill);
     const correct = answers.filter((item) => item.correct).length;
@@ -408,6 +527,10 @@ function Progress({ progress }: { progress: StudentProgress }) {
   });
   return (
     <section>
+      <div className="section-title">
+        <h3>{student.avatar} {student.name} 的學習進度</h3>
+        <span className="pill blue">代碼 {student.code}</span>
+      </div>
       <div className="metric-grid">
         <div className="metric"><strong>{progress.completedLessons.length}</strong><small>完成故事</small></div>
         <div className="metric"><strong>{progress.stars}</strong><small>星星</small></div>

@@ -63,3 +63,11 @@ export type StudentProgress = {
   answers: { lessonId: string; skill: Skill; correct: boolean; date: string }[];
   badges: string[];
 };
+
+export type StudentSession = {
+  id: string;
+  name: string;
+  code: string;
+  avatar: string;
+  loginAt: string;
+};

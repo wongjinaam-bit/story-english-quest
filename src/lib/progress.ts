@@ -1,27 +1,56 @@
-import type { Skill, StudentProgress } from "@/lib/types";
+import type { Skill, StudentProgress, StudentSession } from "@/lib/types";
 
-const emptyProgress: StudentProgress = {
-  stars: 0,
-  streak: 0,
-  completedLessons: [],
-  completedSkills: {},
-  mistakes: {},
-  answers: [],
-  badges: []
-};
+const currentStudentKey = "seq-current-student";
 
-export function loadProgress(): StudentProgress {
-  if (typeof window === "undefined") return emptyProgress;
+function emptyProgress(): StudentProgress {
+  return {
+    stars: 0,
+    streak: 0,
+    completedLessons: [],
+    completedSkills: {},
+    mistakes: {},
+    answers: [],
+    badges: []
+  };
+}
+
+function progressKey(studentId: string) {
+  return `seq-progress-${studentId}`;
+}
+
+export function loadStudentSession(): StudentSession | null {
+  if (typeof window === "undefined") return null;
   try {
-    return { ...emptyProgress, ...JSON.parse(localStorage.getItem("seq-progress") || "{}") };
+    return JSON.parse(localStorage.getItem(currentStudentKey) || "null");
   } catch {
-    return emptyProgress;
+    return null;
   }
 }
 
-export function saveProgress(progress: StudentProgress) {
+export function saveStudentSession(student: StudentSession) {
   if (typeof window !== "undefined") {
-    localStorage.setItem("seq-progress", JSON.stringify(progress));
+    localStorage.setItem(currentStudentKey, JSON.stringify(student));
+  }
+}
+
+export function clearStudentSession() {
+  if (typeof window !== "undefined") {
+    localStorage.removeItem(currentStudentKey);
+  }
+}
+
+export function loadProgress(studentId = "guest"): StudentProgress {
+  if (typeof window === "undefined") return emptyProgress();
+  try {
+    return { ...emptyProgress(), ...JSON.parse(localStorage.getItem(progressKey(studentId)) || "{}") };
+  } catch {
+    return emptyProgress();
+  }
+}
+
+export function saveProgress(progress: StudentProgress, studentId = "guest") {
+  if (typeof window !== "undefined") {
+    localStorage.setItem(progressKey(studentId), JSON.stringify(progress));
   }
 }
 

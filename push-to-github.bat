@@ -18,6 +18,11 @@ if "%REPO_URL%"=="" (
   exit /b 1
 )
 
+echo.
+echo Marking this project folder as safe for Git...
+git config --global --add safe.directory "%CD%"
+git config --global --add safe.directory "%CD:\=/%"
+
 git remote get-url origin >nul 2>nul
 if errorlevel 1 (
   git remote add origin "%REPO_URL%"
