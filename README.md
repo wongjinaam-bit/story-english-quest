@@ -91,6 +91,19 @@ deploy-to-vercel.bat
 
 如果畫面出現 Vercel 登入網址，請用瀏覽器打開該網址並完成登入。完成後部署會繼續進行，最後會顯示正式網址。
 
+## 推送到 GitHub
+
+1. 到 GitHub 建立一個空 repository，例如 `story-english-quest`。
+2. 不要勾選 README、.gitignore 或 license，因為本機專案已經有這些檔案。
+3. 複製 GitHub 顯示的 HTTPS repository URL。
+4. 雙擊或執行：
+
+```text
+push-to-github.bat
+```
+
+5. 貼上 repository URL，等待推送完成。
+
 手動部署方式：
 
 1. 將專案推到 GitHub。
