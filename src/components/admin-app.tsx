@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { appLessons } from "@/data/lessons";
 import { isSupabaseReady, signInStaff, signOut } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
-import type { Profile, StudentProgress, UserRole } from "@/lib/types";
+import type { AppAssignment, CourseDraft, Profile, Skill, StudentProgress, UserRole } from "@/lib/types";
 
 type AdminTab = "dashboard" | "students" | "assignments" | "courses" | "admin";
 
@@ -188,8 +188,8 @@ export function AdminApp() {
             onSelectStudent={setSelectedStudentId}
           />
         )}
-        {tab === "assignments" && <Assignments students={students} />}
-        {tab === "courses" && <Courses />}
+        {tab === "assignments" && <Assignments students={students} teacher={profile} supabaseReady={supabaseReady} />}
+        {tab === "courses" && <Courses teacher={profile} supabaseReady={supabaseReady} />}
         {tab === "admin" && <AdminTools />}
       </main>
     </div>
@@ -343,32 +343,205 @@ function Students({
   );
 }
 
-function Assignments({ students }: { students: StudentRow[] }) {
-  return (
-    <article className="panel">
-      <h3>指定任務</h3>
-      <form className="form">
-        <div className="field">
-          <label>學生</label>
-          <select>
-            {students.length ? students.map((s) => <option key={s.profile.id}>{s.profile.name}</option>) : demoStudents.map((s) => <option key={s.id}>{s.name}</option>)}
-          </select>
-        </div>
-        <div className="field"><label>課程</label><select>{appLessons.map((lesson) => <option key={lesson.id}>{lesson.title}</option>)}</select></div>
-        <div className="field"><label>技能</label><select><option>全部</option><option>聽力</option><option>口說</option><option>閱讀</option><option>寫作</option></select></div>
-        <button className="btn secondary" type="button" disabled>下一階段：建立指定任務</button>
-      </form>
-      <p className="muted">任務指定寫入資料庫會放在下一階段實作。</p>
-    </article>
-  );
-}
+function Assignments({ students, teacher, supabaseReady }: { students: StudentRow[]; teacher: Profile | null; supabaseReady: boolean }) {
+  const [studentId, setStudentId] = useState("");
+  const [lessonId, setLessonId] = useState(appLessons[0].id);
+  const [skill, setSkill] = useState<Skill | "all">("all");
+  const [dueDate, setDueDate] = useState("");
+  const [note, setNote] = useState("");
+  const [assignments, setAssignments] = useState<AppAssignment[]>([]);
+  const [message, setMessage] = useState("");
 
-function Courses() {
-  const totalWords = useMemo(() => appLessons.reduce((sum, lesson) => sum + lesson.words.length, 0), []);
+  useEffect(() => {
+    if (!studentId && students[0]) setStudentId(students[0].profile.id);
+  }, [studentId, students]);
+
+  async function loadAssignments() {
+    if (!supabaseReady || !supabase) return;
+    const { data, error } = await supabase.from("app_assignments").select("*").order("created_at", { ascending: false });
+    if (error) {
+      setMessage("任務資料表還沒建立，請先執行 teacher-tools-upgrade.sql。");
+      return;
+    }
+    setAssignments((data || []) as AppAssignment[]);
+  }
+
+  useEffect(() => {
+    loadAssignments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supabaseReady]);
+
+  async function createAssignment() {
+    setMessage("");
+    if (!supabaseReady || !supabase || !teacher) {
+      setMessage("請先使用正式教師帳號登入。");
+      return;
+    }
+    if (!studentId) {
+      setMessage("請先選擇學生。");
+      return;
+    }
+
+    const { error } = await supabase.from("app_assignments").insert({
+      teacher_id: teacher.id,
+      student_id: studentId,
+      lesson_id: lessonId,
+      skill,
+      due_date: dueDate || null,
+      note: note.trim() || null
+    });
+
+    if (error) {
+      setMessage(error.message.includes("app_assignments") ? "任務資料表還沒建立，請先執行 teacher-tools-upgrade.sql。" : error.message);
+      return;
+    }
+
+    setMessage("任務已指定給學生。");
+    setNote("");
+    await loadAssignments();
+  }
+
+  const studentName = (id: string) => students.find((row) => row.profile.id === id)?.profile.name || "學生";
+  const lessonTitle = (id: string) => appLessons.find((lesson) => lesson.id === id)?.title || id;
+
   return (
     <div className="grid two">
       <article className="panel">
-        <h3>課程列表</h3>
+        <h3>指定任務</h3>
+        <form className="form" onSubmit={(event) => { event.preventDefault(); createAssignment(); }}>
+          <div className="field">
+            <label>學生</label>
+            <select value={studentId} onChange={(event) => setStudentId(event.target.value)}>
+              {students.length ? students.map((s) => <option key={s.profile.id} value={s.profile.id}>{s.profile.name}</option>) : <option value="">請先建立學生</option>}
+            </select>
+          </div>
+          <div className="field">
+            <label>課程</label>
+            <select value={lessonId} onChange={(event) => setLessonId(event.target.value)}>
+              {appLessons.map((lesson) => <option key={lesson.id} value={lesson.id}>{lesson.title}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label>技能</label>
+            <select value={skill} onChange={(event) => setSkill(event.target.value as Skill | "all")}>
+              <option value="all">全部任務</option>
+              <option value="listen">聽力</option>
+              <option value="speak">口說</option>
+              <option value="read">閱讀</option>
+              <option value="write">寫作</option>
+            </select>
+          </div>
+          <div className="field"><label>截止日期</label><input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} /></div>
+          <div className="field"><label>老師備註</label><textarea rows={3} value={note} onChange={(event) => setNote(event.target.value)} placeholder="例如：今天完成聽力和閱讀" /></div>
+          {message && <p className={message.includes("已指定") ? "success-text" : "form-error"}>{message}</p>}
+          <button className="btn primary" type="submit" disabled={!students.length}>建立指定任務</button>
+        </form>
+      </article>
+
+      <article className="panel">
+        <div className="section-title compact">
+          <h3>已指定任務</h3>
+          <button className="btn secondary" onClick={loadAssignments}>重新整理</button>
+        </div>
+        {assignments.length ? assignments.map((item) => (
+          <div className="assignment-row" key={item.id}>
+            <strong>{studentName(item.student_id)}：{lessonTitle(item.lesson_id)}</strong>
+            <small>{item.skill === "all" ? "全部任務" : item.skill} · {item.due_date || "無截止日期"} · {item.status}</small>
+            {item.note && <p className="muted">{item.note}</p>}
+          </div>
+        )) : <p className="muted">暫時沒有指定任務。</p>}
+      </article>
+    </div>
+  );
+}
+
+function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabaseReady: boolean }) {
+  const totalWords = useMemo(() => appLessons.reduce((sum, lesson) => sum + lesson.words.length, 0), []);
+  const [drafts, setDrafts] = useState<CourseDraft[]>([]);
+  const [editingId, setEditingId] = useState("");
+  const [title, setTitle] = useState("");
+  const [topic, setTopic] = useState("");
+  const [level, setLevel] = useState(1);
+  const [cover, setCover] = useState("📘");
+  const [pattern, setPattern] = useState("I see a ____.");
+  const [message, setMessage] = useState("");
+
+  async function loadDrafts() {
+    if (!supabaseReady || !supabase) return;
+    const { data, error } = await supabase.from("course_drafts").select("*").order("updated_at", { ascending: false });
+    if (error) {
+      setMessage("課程草稿資料表還沒建立，請先執行 teacher-tools-upgrade.sql。");
+      return;
+    }
+    setDrafts((data || []) as CourseDraft[]);
+  }
+
+  useEffect(() => {
+    loadDrafts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supabaseReady]);
+
+  function editDraft(draft: CourseDraft) {
+    setEditingId(draft.id);
+    setTitle(draft.title);
+    setTopic(draft.topic);
+    setLevel(draft.level);
+    setCover(draft.cover);
+    setPattern(draft.pattern);
+    setMessage("");
+  }
+
+  function resetDraftForm() {
+    setEditingId("");
+    setTitle("");
+    setTopic("");
+    setLevel(1);
+    setCover("📘");
+    setPattern("I see a ____.");
+  }
+
+  async function saveDraft() {
+    setMessage("");
+    if (!supabaseReady || !supabase || !teacher) {
+      setMessage("請先使用正式教師帳號登入。");
+      return;
+    }
+    if (!title.trim() || !topic.trim()) {
+      setMessage("請輸入課程名稱和主題。");
+      return;
+    }
+    const id = editingId || title.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || `course-${Date.now()}`;
+    const { error } = await supabase.from("course_drafts").upsert({
+      id,
+      title: title.trim(),
+      topic: topic.trim(),
+      level,
+      cover,
+      pattern,
+      status: "draft",
+      content: {},
+      updated_by: teacher.id,
+      updated_at: new Date().toISOString()
+    });
+    if (error) {
+      setMessage(error.message.includes("course_drafts") ? "課程草稿資料表還沒建立，請先執行 teacher-tools-upgrade.sql。" : error.message);
+      return;
+    }
+    setMessage("課程草稿已儲存。");
+    resetDraftForm();
+    await loadDrafts();
+  }
+
+  async function deleteDraft(id: string) {
+    if (!supabaseReady || !supabase) return;
+    await supabase.from("course_drafts").delete().eq("id", id);
+    await loadDrafts();
+  }
+
+  return (
+    <div className="grid two">
+      <article className="panel">
+        <h3>內建課程列表</h3>
         <table className="table">
           <thead><tr><th>課程</th><th>主題</th><th>單字</th><th>狀態</th></tr></thead>
           <tbody>
@@ -377,8 +550,33 @@ function Courses() {
         </table>
       </article>
       <article className="panel">
-        <h3>內容概況</h3>
-        <p className="muted">共 {appLessons.length} 課，{totalWords} 個單字。MVP 先使用內建資料；正式版可連接 Supabase 編輯與發布。</p>
+        <h3>新增 / 編輯課程草稿</h3>
+        <p className="muted">目前先儲存為後台草稿，不會立即改動學生端課程；下一階段會加入「發布到學生端」。</p>
+        <form className="form" onSubmit={(event) => { event.preventDefault(); saveDraft(); }}>
+          <div className="field"><label>課程名稱</label><input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="例如：At the Park" /></div>
+          <div className="field"><label>主題</label><input value={topic} onChange={(event) => setTopic(event.target.value)} placeholder="例如：Nature" /></div>
+          <div className="field"><label>Level</label><input type="number" min={1} max={6} value={level} onChange={(event) => setLevel(Number(event.target.value))} /></div>
+          <div className="field"><label>封面圖示</label><input value={cover} onChange={(event) => setCover(event.target.value)} /></div>
+          <div className="field"><label>句型</label><input value={pattern} onChange={(event) => setPattern(event.target.value)} /></div>
+          {message && <p className={message.includes("已儲存") ? "success-text" : "form-error"}>{message}</p>}
+          <div className="btns">
+            <button className="btn primary" type="submit">{editingId ? "更新草稿" : "新增草稿"}</button>
+            <button className="btn secondary" type="button" onClick={resetDraftForm}>清空</button>
+          </div>
+        </form>
+        <div className="draft-list">
+          {drafts.map((draft) => (
+            <div className="assignment-row" key={draft.id}>
+              <strong>{draft.cover} {draft.title}</strong>
+              <small>{draft.topic} · Level {draft.level} · {draft.status}</small>
+              <div className="btns">
+                <button className="btn secondary" onClick={() => editDraft(draft)}>編輯</button>
+                <button className="btn ghost" onClick={() => deleteDraft(draft.id)}>刪除</button>
+              </div>
+            </div>
+          ))}
+        </div>
+        <p className="muted">目前內建課程共 {appLessons.length} 課，{totalWords} 個單字。</p>
       </article>
     </div>
   );

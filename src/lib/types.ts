@@ -85,3 +85,30 @@ export type Profile = {
   class_id: string | null;
   last_seen_at: string | null;
 };
+
+export type AppAssignment = {
+  id: string;
+  teacher_id: string;
+  student_id: string;
+  lesson_id: string;
+  skill: Skill | "all";
+  due_date: string | null;
+  note: string | null;
+  status: "assigned" | "completed";
+  created_at: string;
+  completed_at: string | null;
+};
+
+export type CourseDraft = {
+  id: string;
+  title: string;
+  topic: string;
+  level: number;
+  cover: string;
+  pattern: string;
+  status: "draft" | "published";
+  content: Record<string, unknown>;
+  updated_by: string | null;
+  updated_at: string;
+  created_at: string;
+};

@@ -146,6 +146,7 @@ h3 { margin: 0; font-size: 24px; }
 .word-actions { margin-top: auto; }
 .word-actions .btn { flex: 1 1 96px; padding: 0 14px; }
 .review-card { min-height: 360px; }
+.assignment-card { min-height: 230px; }
 .review-card-main { flex: 1; min-width: 0; }
 .review-head { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
 .review-card .emoji { font-size: 46px; margin-bottom: 8px; }
@@ -216,6 +217,18 @@ h3 { margin: 0; font-size: 24px; }
   background: #f9fbff;
 }
 .mistake-line small { display: block; }
+.assignment-row {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #f9fbff;
+  margin-top: 12px;
+}
+.assignment-row small { display: block; }
+.assignment-row .btns { margin-top: 8px; }
+.draft-list { margin-top: 18px; }
 .form { display: grid; gap: 12px; max-width: 520px; }
 .field { display: grid; gap: 7px; }
 .field input, .field textarea, .field select {

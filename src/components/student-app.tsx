@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Headphones, LogOut, Mic, QrCode, Sparkles, Star, UserRound } from "lucide-react";
 import { appLessons } from "@/data/lessons";
 import { isSupabaseReady, signInStudent, signOut, signUpStudent } from "@/lib/auth";
+import { supabase } from "@/lib/supabase";
 import {
   clearStudentSession,
   loadCloudProgress,
@@ -14,7 +15,7 @@ import {
   saveCloudProgress,
   saveStudentSession
 } from "@/lib/progress";
-import type { ChoiceQuestion, Lesson, Skill, StudentProgress, StudentSession, Word } from "@/lib/types";
+import type { AppAssignment, ChoiceQuestion, Lesson, Skill, StudentProgress, StudentSession, Word } from "@/lib/types";
 
 type Screen = "home" | "map" | "story" | "vocab" | "listen" | "speak" | "read" | "write" | "review" | "progress";
 
@@ -43,6 +44,7 @@ export function StudentApp() {
   const [progress, setProgress] = useState<StudentProgress | null>(null);
   const [showZh, setShowZh] = useState(true);
   const [speed, setSpeed] = useState(0.85);
+  const [assignments, setAssignments] = useState<AppAssignment[]>([]);
   const lesson = useMemo(() => appLessons.find((item) => item.id === lessonId) || appLessons[0], [lessonId]);
 
   useEffect(() => {
@@ -56,6 +58,17 @@ export function StudentApp() {
   useEffect(() => {
     if (student && progress) saveCloudProgress(student.id, progress);
   }, [progress, student]);
+
+  useEffect(() => {
+    if (!student || student.mode !== "supabase" || !supabase) return;
+    supabase
+      .from("app_assignments")
+      .select("*")
+      .eq("student_id", student.id)
+      .eq("status", "assigned")
+      .order("created_at", { ascending: false })
+      .then(({ data }) => setAssignments((data || []) as AppAssignment[]));
+  }, [student]);
 
   async function enterStudent(nextStudent: StudentSession) {
     saveStudentSession(nextStudent);
@@ -119,6 +132,11 @@ export function StudentApp() {
 
   function answerReview(label: string, skill: Skill, correct: boolean) {
     mutateProgress((draft) => recordAnswer(draft, lesson.id, skill, label, correct));
+  }
+
+  function startAssignment(assignment: AppAssignment) {
+    setLessonId(assignment.lesson_id);
+    setScreen(assignment.skill === "all" ? "story" : assignment.skill);
   }
 
   return (
@@ -197,6 +215,28 @@ export function StudentApp() {
                 <small>{lesson.pattern}</small>
               </div>
             </section>
+
+            {assignments.length > 0 && (
+              <>
+                <div className="section-title"><h3>老師指定任務</h3><span className="pill blue">{assignments.length} 個任務</span></div>
+                <div className="grid cards">
+                  {assignments.map((item) => {
+                    const assignedLesson = appLessons.find((lesson) => lesson.id === item.lesson_id);
+                    return (
+                      <article className="card assignment-card" key={item.id}>
+                        <span className="pill">{item.skill === "all" ? "全部任務" : skillLabels[item.skill]}</span>
+                        <h3>{assignedLesson?.title || item.lesson_id}</h3>
+                        <p className="muted">
+                          {item.due_date ? `截止日期：${item.due_date}` : "沒有截止日期"}
+                          {item.note ? <><br />老師備註：{item.note}</> : null}
+                        </p>
+                        <button className="btn primary full" onClick={() => startAssignment(item)}>開始指定任務</button>
+                      </article>
+                    );
+                  })}
+                </div>
+              </>
+            )}
 
             <section className="learning-path">
               {[
