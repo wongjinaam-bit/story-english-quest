@@ -258,6 +258,110 @@ h3 { margin: 0; font-size: 24px; }
   gap: 10px;
   align-items: center;
 }
+.course-list-panel {
+  overflow-x: auto;
+}
+.course-list-panel .table td:first-child {
+  min-width: 220px;
+}
+.course-list-panel .table td:first-child strong,
+.course-list-panel .table td:first-child small {
+  display: block;
+}
+.course-table-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.course-table-actions .btn {
+  min-height: 38px;
+  padding: 0 12px;
+  border-radius: 12px;
+}
+.course-list-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+.course-editor {
+  display: grid;
+  gap: 18px;
+}
+.course-editor .panel {
+  padding: 24px;
+}
+.course-editor-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 20px;
+}
+.course-editor-head h3 {
+  margin-bottom: 8px;
+  font-size: 32px;
+}
+.course-editor-head p {
+  max-width: 760px;
+  line-height: 1.6;
+}
+.template-actions {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #f9fbff;
+  margin-bottom: 18px;
+}
+.course-form {
+  display: grid;
+  gap: 16px;
+}
+.editor-section {
+  display: grid;
+  grid-template-columns: 240px minmax(0,1fr);
+  gap: 20px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #fff;
+}
+.editor-section h4 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+.editor-section p {
+  margin: 0;
+  line-height: 1.55;
+}
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0,1fr));
+  gap: 12px;
+}
+.form-grid .span-2 {
+  grid-column: 1 / -1;
+}
+.field small {
+  color: var(--muted);
+  line-height: 1.45;
+}
+.sticky-actions {
+  position: sticky;
+  bottom: 14px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255,255,255,.92);
+  box-shadow: 0 16px 36px rgba(49,90,217,.12);
+  backdrop-filter: blur(12px);
+}
 .login-page { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
 .login-card { width: min(460px, 100%); padding: 28px; border-radius: 24px; background: white; border: 1px solid var(--line); box-shadow: var(--shadow); }
 .student-login-page {
@@ -346,6 +450,13 @@ h3 { margin: 0; font-size: 24px; }
   .nav button { text-align: center; padding: 12px 8px; }
   .main, .admin-main { padding: 18px; }
   .hero, .grid.two { grid-template-columns: 1fr; }
+  .course-editor-head,
+  .editor-section {
+    grid-template-columns: 1fr;
+  }
+  .course-editor-head {
+    display: grid;
+  }
   .learning-path { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .teacher-student-layout { grid-template-columns: 1fr; }
   .student-detail-panel { position: static; }
@@ -358,5 +469,12 @@ h3 { margin: 0; font-size: 24px; }
   .hero h3 { font-size: 38px; }
   .learning-path { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .story-line { grid-template-columns: 1fr; }
+  .form-grid,
+  .inline-controls {
+    grid-template-columns: 1fr;
+  }
+  .sticky-actions .btn {
+    width: 100%;
+  }
   .avatar-grid { grid-template-columns: repeat(3, 1fr); }
 }

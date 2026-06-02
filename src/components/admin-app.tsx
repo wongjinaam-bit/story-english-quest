@@ -477,6 +477,7 @@ function Assignments({ students, teacher, supabaseReady }: { students: StudentRo
 function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabaseReady: boolean }) {
   const totalWords = useMemo(() => appLessons.reduce((sum, lesson) => sum + lesson.words.length, 0), []);
   const [drafts, setDrafts] = useState<CourseDraft[]>([]);
+  const [view, setView] = useState<"list" | "editor">("list");
   const [sourceLessonId, setSourceLessonId] = useState(appLessons[0].id);
   const [editingId, setEditingId] = useState("");
   const [title, setTitle] = useState("");
@@ -506,6 +507,7 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
     setSpeakText(lesson.speak.map((item) => `${item.prompt} | ${item.target}`).join("\n"));
     setWriteText(lesson.write.map((item) => `${item.prompt} | ${item.starter} | ${item.answerHint}`).join("\n"));
     setMessage("已載入現有課程，可修改後儲存為草稿。");
+    setView("editor");
   }
 
   async function loadDrafts() {
@@ -538,6 +540,7 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
     setSpeakText(content.speakText || "");
     setWriteText(content.writeText || "");
     setMessage("");
+    setView("editor");
   }
 
   function resetDraftForm() {
@@ -557,21 +560,49 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
 
   function newBlankCourse() {
     setEditingId("");
-    setTitle("");
-    setTopic("");
+    setTitle("My New Story");
+    setTopic("Daily Life");
     setLevel(1);
     setCover("📘");
-    setPattern("I see a ____.");
-    setSentencesText("I see a _____. | 我看到一個_____。 | 👀");
-    setWordsText("word | 中文意思 | noun | 📘 | I see a word. | 我看到一個單字。 | Level 1");
-    setListenText("聽單字，選出意思：word | 中文意思 | 中文意思, 其他選項, 其他選項 | word");
-    setReadText("What do you see? | word | word, book, bag");
-    setSpeakText("跟讀單字 | word\n跟讀句子 | I see a word.");
-    setWriteText("完成句子 | I see a ____. | word\n寫一句自己的句子 | I like ____. | your idea");
-    setMessage("已建立空白課程模板，請填寫後按「新增草稿」。");
+    setPattern("I can ____.");
+    setSentencesText([
+      "Today is a sunny day. | 今天是晴朗的一天。 | ☀️",
+      "I see my friend at school. | 我在學校看到我的朋友。 | 🏫",
+      "We read a book together. | 我們一起讀一本書。 | 📖",
+      "I can say the new words. | 我會說新的單字。 | 🗣️",
+      "We are happy today. | 我們今天很開心。 | 😊"
+    ].join("\n"));
+    setWordsText([
+      "sunny | 晴朗的 | adjective | ☀️ | It is sunny today. | 今天是晴朗的。 | Level 1",
+      "friend | 朋友 | noun | 🧑‍🤝‍🧑 | I see my friend. | 我看到我的朋友。 | Level 1",
+      "school | 學校 | noun | 🏫 | I go to school. | 我去學校。 | Level 1",
+      "read | 閱讀 | verb | 📖 | I read a book. | 我讀一本書。 | Level 1",
+      "say | 說 | verb | 🗣️ | I can say it. | 我會說它。 | Level 1",
+      "happy | 開心的 | adjective | 😊 | I am happy. | 我很開心。 | Level 1"
+    ].join("\n"));
+    setListenText([
+      "聽單字，選出正確意思：sunny | 晴朗的 | 晴朗的, 傷心的, 大的, 跳 | sunny",
+      "聽句子，選出你聽到的句子 | I read a book. | I read a book., I eat lunch., I see a zoo. | I read a book."
+    ].join("\n"));
+    setReadText([
+      "Where do I see my friend? | school | school, zoo, park, home",
+      "What do we read together? | book | book, ball, cake, bag"
+    ].join("\n"));
+    setSpeakText([
+      "跟讀單字 | sunny",
+      "跟讀句子 | I read a book.",
+      "看圖說一句 | I can say the new words."
+    ].join("\n"));
+    setWriteText([
+      "完成句子 | I can ____. | read",
+      "替換單字造句 | I see my ____. | friend",
+      "寫一句自己的句子 | I am ____. | happy"
+    ].join("\n"));
+    setMessage("已建立完整課程模板，請按區塊修改後儲存或發布。");
+    setView("editor");
   }
 
-  async function saveDraft() {
+  async function saveDraft(nextStatus: "draft" | "published" = "draft") {
     setMessage("");
     if (!supabaseReady || !supabase || !teacher) {
       setMessage("請先使用正式教師帳號登入。");
@@ -589,7 +620,7 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
       level,
       cover,
       pattern,
-      status: "draft",
+      status: nextStatus,
       content: {
         sentencesText,
         wordsText,
@@ -605,13 +636,16 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
       setMessage(error.message.includes("course_drafts") ? "課程草稿資料表還沒建立，請先執行 teacher-tools-upgrade.sql。" : error.message);
       return;
     }
-    setMessage("課程草稿已儲存。");
+    setMessage(nextStatus === "published" ? "課程已發布到學生端。" : "課程草稿已儲存。");
     resetDraftForm();
     await loadDrafts();
+    setView("list");
   }
 
   async function deleteDraft(id: string) {
     if (!supabaseReady || !supabase) return;
+    const confirmed = window.confirm("確定要刪除這個自訂課程草稿嗎？刪除後學生端也不會再看到這個發布課程。");
+    if (!confirmed) return;
     await supabase.from("course_drafts").delete().eq("id", id);
     await loadDrafts();
   }
@@ -630,66 +664,218 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
     await loadDrafts();
   }
 
-  return (
-    <div className="grid two">
-      <article className="panel">
-        <h3>內建課程列表</h3>
-        <table className="table">
-          <thead><tr><th>課程</th><th>主題</th><th>單字</th><th>狀態</th></tr></thead>
-          <tbody>
-            {appLessons.map((lesson) => <tr key={lesson.id}><td>{lesson.title}</td><td>{lesson.topic}</td><td>{lesson.words.length}</td><td>Published</td></tr>)}
-          </tbody>
-        </table>
-      </article>
-      <article className="panel">
-        <h3>新增 / 編輯完整課程草稿</h3>
-        <p className="muted">可選現有課程載入模板，修改故事、單字、聽說讀寫。草稿不會立即改動學生端，下一階段再加入發布。</p>
-        <div className="btns">
-          <button className="btn primary" type="button" onClick={newBlankCourse}>新增空白課程單元</button>
-        </div>
-        <div className="field">
-          <label>選擇現有課程作為模板</label>
-          <div className="inline-controls">
-            <select value={sourceLessonId} onChange={(event) => setSourceLessonId(event.target.value)}>
-              {appLessons.map((lesson) => <option key={lesson.id} value={lesson.id}>{lesson.title}</option>)}
-            </select>
-            <button className="btn secondary" type="button" onClick={() => loadLessonTemplate()}>載入編輯</button>
+  const draftMap = new Map(drafts.map((draft) => [draft.id, draft]));
+  const builtinRows = appLessons.map((lesson) => {
+    const draft = draftMap.get(lesson.id);
+    return {
+      id: lesson.id,
+      title: draft?.title || lesson.title,
+      topic: draft?.topic || lesson.topic,
+      level: draft?.level || lesson.level,
+      cover: draft?.cover || lesson.cover,
+      words: draft ? countFilledLines((draft.content as any)?.wordsText) : lesson.words.length,
+      status: draft ? (draft.status === "published" ? "已發布自訂版" : "草稿覆蓋中") : "內建已發布",
+      source: "內建課程",
+      draft,
+      lesson,
+      canDelete: false
+    };
+  });
+  const customRows = drafts
+    .filter((draft) => !appLessons.some((lesson) => lesson.id === draft.id))
+    .map((draft) => ({
+      id: draft.id,
+      title: draft.title,
+      topic: draft.topic,
+      level: draft.level,
+      cover: draft.cover,
+      words: countFilledLines((draft.content as any)?.wordsText),
+      status: draft.status === "published" ? "已發布到學生端" : "草稿",
+      source: "自訂課程",
+      draft,
+      lesson: null,
+      canDelete: true
+    }));
+  const courseRows = [...builtinRows, ...customRows];
+
+  function countFilledLines(value?: string) {
+    return (value || "").split("\n").filter((line) => line.trim()).length;
+  }
+
+  function openCourseEditor(row: (typeof courseRows)[number]) {
+    if (row.draft) {
+      editDraft(row.draft);
+      return;
+    }
+    if (row.lesson) {
+      setSourceLessonId(row.lesson.id);
+      loadLessonTemplate(row.lesson);
+    }
+  }
+
+  if (view === "editor") {
+    return (
+      <div className="course-editor">
+        <article className="panel">
+          <div className="course-editor-head">
+            <div>
+              <p className="eyebrow">Course Builder</p>
+              <h3>{editingId ? "編輯課程單元" : "新增課程單元"}</h3>
+              <p className="muted">完整填寫故事、單字、聽說讀寫任務。按「儲存並發布」後，學生端課程地圖會看到這個課程。</p>
+            </div>
+            <button className="btn secondary" type="button" onClick={() => { resetDraftForm(); setMessage(""); setView("list"); }}>返回課程列表</button>
           </div>
-        </div>
-        <form className="form" onSubmit={(event) => { event.preventDefault(); saveDraft(); }}>
-          <div className="field"><label>課程名稱</label><input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="例如：At the Park" /></div>
-          <div className="field"><label>主題</label><input value={topic} onChange={(event) => setTopic(event.target.value)} placeholder="例如：Nature" /></div>
-          <div className="field"><label>Level</label><input type="number" min={1} max={6} value={level} onChange={(event) => setLevel(Number(event.target.value))} /></div>
-          <div className="field"><label>封面圖示</label><input value={cover} onChange={(event) => setCover(event.target.value)} /></div>
-          <div className="field"><label>句型</label><input value={pattern} onChange={(event) => setPattern(event.target.value)} /></div>
-          <div className="field"><label>故事句子（一行一個：英文 | 中文 | 圖示）</label><textarea rows={5} value={sentencesText} onChange={(event) => setSentencesText(event.target.value)} /></div>
-          <div className="field"><label>單字（一行一個：word | 中文 | 詞性 | 圖示 | 例句 | 翻譯 | Level）</label><textarea rows={6} value={wordsText} onChange={(event) => setWordsText(event.target.value)} /></div>
-          <div className="field"><label>聽力題（一行一題：題目 | 答案 | 選項1, 選項2, 選項3 | 音訊文字）</label><textarea rows={5} value={listenText} onChange={(event) => setListenText(event.target.value)} /></div>
-          <div className="field"><label>閱讀題（一行一題：題目 | 答案 | 選項1, 選項2, 選項3）</label><textarea rows={5} value={readText} onChange={(event) => setReadText(event.target.value)} /></div>
-          <div className="field"><label>口說任務（一行一題：提示 | 目標句）</label><textarea rows={4} value={speakText} onChange={(event) => setSpeakText(event.target.value)} /></div>
-          <div className="field"><label>寫作任務（一行一題：提示 | 開頭句 | 答案提示）</label><textarea rows={4} value={writeText} onChange={(event) => setWriteText(event.target.value)} /></div>
-          {message && <p className={message.includes("已儲存") ? "success-text" : "form-error"}>{message}</p>}
-          <div className="btns">
-            <button className="btn primary" type="submit">{editingId ? "更新草稿" : "新增草稿"}</button>
-            <button className="btn secondary" type="button" onClick={resetDraftForm}>清空</button>
-          </div>
-        </form>
-        <div className="draft-list">
-          {drafts.map((draft) => (
-            <div className="assignment-row" key={draft.id}>
-              <strong>{draft.cover} {draft.title}</strong>
-              <small>{draft.topic} · Level {draft.level} · {draft.status}</small>
-              <div className="btns">
-                <button className="btn secondary" onClick={() => editDraft(draft)}>編輯</button>
-                <button className="btn primary" onClick={() => setDraftStatus(draft.id, draft.status === "published" ? "draft" : "published")}>
-                  {draft.status === "published" ? "下架" : "發布到學生端"}
-                </button>
-                <button className="btn ghost" onClick={() => deleteDraft(draft.id)}>刪除</button>
+
+          <div className="template-actions">
+            <div className="field">
+              <label>用現有課程作為模板</label>
+              <div className="inline-controls">
+                <select value={sourceLessonId} onChange={(event) => setSourceLessonId(event.target.value)}>
+                  {appLessons.map((lesson) => <option key={lesson.id} value={lesson.id}>{lesson.title}</option>)}
+                </select>
+                <button className="btn secondary" type="button" onClick={() => loadLessonTemplate()}>載入模板</button>
               </div>
             </div>
-          ))}
+          </div>
+
+          <form className="course-form" onSubmit={(event) => { event.preventDefault(); saveDraft("draft"); }}>
+            <section className="editor-section">
+              <div>
+                <h4>1. 課程基本資料</h4>
+                <p className="muted">學生會在課程地圖看到這些資訊。</p>
+              </div>
+              <div className="form-grid">
+                <div className="field"><label>課程名稱</label><input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="例如：At the Park" /></div>
+                <div className="field"><label>主題</label><input value={topic} onChange={(event) => setTopic(event.target.value)} placeholder="例如：Nature / School / Food" /></div>
+                <div className="field"><label>Level</label><input type="number" min={1} max={6} value={level} onChange={(event) => setLevel(Number(event.target.value))} /></div>
+                <div className="field"><label>封面圖示</label><input value={cover} onChange={(event) => setCover(event.target.value)} placeholder="例如：📘" /></div>
+                <div className="field span-2"><label>核心句型</label><input value={pattern} onChange={(event) => setPattern(event.target.value)} placeholder="例如：I can ____." /></div>
+              </div>
+            </section>
+
+            <section className="editor-section">
+              <div>
+                <h4>2. 迷你故事</h4>
+                <p className="muted">建議 4 至 6 句，每句包含英文、中文和圖示。</p>
+              </div>
+              <div className="field">
+                <label>格式：英文 | 中文 | 圖示</label>
+                <textarea rows={7} value={sentencesText} onChange={(event) => setSentencesText(event.target.value)} />
+                <small>例：I see a monkey. | 我看到一隻猴子。 | 🐵</small>
+              </div>
+            </section>
+
+            <section className="editor-section">
+              <div>
+                <h4>3. 單字卡</h4>
+                <p className="muted">建議 6 至 10 個單字，包含詞性、例句和中文翻譯。</p>
+              </div>
+              <div className="field">
+                <label>格式：word | 中文 | 詞性 | 圖示 | 例句 | 翻譯 | Level</label>
+                <textarea rows={8} value={wordsText} onChange={(event) => setWordsText(event.target.value)} />
+                <small>例：monkey | 猴子 | noun | 🐵 | The monkey can jump. | 猴子會跳。 | Level 1</small>
+              </div>
+            </section>
+
+            <section className="editor-section">
+              <div>
+                <h4>4. 聽力任務</h4>
+                <p className="muted">可以放聽單字、聽句子、聽故事後選答案。</p>
+              </div>
+              <div className="field">
+                <label>格式：題目 | 答案 | 選項1, 選項2, 選項3, 選項4 | 音訊文字</label>
+                <textarea rows={6} value={listenText} onChange={(event) => setListenText(event.target.value)} />
+                <small>例：聽句子，選出你聽到的句子 | I see a monkey. | I see a monkey., I eat rice., I am happy. | I see a monkey.</small>
+              </div>
+            </section>
+
+            <section className="editor-section">
+              <div>
+                <h4>5. 閱讀任務</h4>
+                <p className="muted">讓學生根據故事理解內容。</p>
+              </div>
+              <div className="field">
+                <label>格式：題目 | 答案 | 選項1, 選項2, 選項3, 選項4</label>
+                <textarea rows={6} value={readText} onChange={(event) => setReadText(event.target.value)} />
+              </div>
+            </section>
+
+            <section className="editor-section">
+              <div>
+                <h4>6. 口說任務</h4>
+                <p className="muted">安排跟讀、替換句型、看圖說話。</p>
+              </div>
+              <div className="field">
+                <label>格式：提示 | 目標句</label>
+                <textarea rows={5} value={speakText} onChange={(event) => setSpeakText(event.target.value)} />
+              </div>
+            </section>
+
+            <section className="editor-section">
+              <div>
+                <h4>7. 寫作任務</h4>
+                <p className="muted">由填空到造句，逐步降低難度。</p>
+              </div>
+              <div className="field">
+                <label>格式：提示 | 開頭句 | 答案提示</label>
+                <textarea rows={5} value={writeText} onChange={(event) => setWriteText(event.target.value)} />
+              </div>
+            </section>
+
+            {message && <p className={message.includes("已") ? "success-text" : "form-error"}>{message}</p>}
+            <div className="sticky-actions">
+              <button className="btn secondary" type="button" onClick={() => { resetDraftForm(); setView("list"); }}>取消</button>
+              <button className="btn ghost" type="submit">{editingId ? "儲存草稿" : "新增草稿"}</button>
+              <button className="btn primary" type="button" onClick={() => saveDraft("published")}>儲存並發布到學生端</button>
+            </div>
+          </form>
+        </article>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid">
+      <article className="panel course-list-panel">
+        <div className="section-title compact">
+          <div>
+            <h3>課程內容管理</h3>
+            <p className="muted">管理學生端會看到的課程。內建課程可編輯成自訂版本，自訂課程可發布、下架或刪除。</p>
+          </div>
+          <button className="btn primary" type="button" onClick={newBlankCourse}>新增課程單元</button>
         </div>
-        <p className="muted">目前內建課程共 {appLessons.length} 課，{totalWords} 個單字。</p>
+        <table className="table">
+          <thead><tr><th>課程</th><th>主題</th><th>Level</th><th>單字</th><th>狀態</th><th>操作</th></tr></thead>
+          <tbody>
+            {courseRows.map((row) => (
+              <tr key={row.id}>
+                <td><strong>{row.cover} {row.title}</strong><small>{row.source}</small></td>
+                <td>{row.topic}</td>
+                <td>{row.level}</td>
+                <td>{row.words}</td>
+                <td><span className="pill blue">{row.status}</span></td>
+                <td>
+                  <div className="course-table-actions">
+                    <button className="btn secondary" type="button" onClick={() => openCourseEditor(row)}>編輯</button>
+                    {row.draft && (
+                      <button className="btn ghost" type="button" onClick={() => setDraftStatus(row.draft!.id, row.draft!.status === "published" ? "draft" : "published")}>
+                        {row.draft.status === "published" ? "下架" : "發布"}
+                      </button>
+                    )}
+                    <button className="btn ghost" type="button" disabled={!row.canDelete} onClick={() => row.draft && deleteDraft(row.draft.id)}>
+                      刪除
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="course-list-footer">
+          <button className="btn primary" type="button" onClick={newBlankCourse}>新增課程單元</button>
+          <p className="muted">目前共有 {courseRows.length} 個課程，內建 {appLessons.length} 課，約 {totalWords} 個內建單字。</p>
+        </div>
+        {message && <p className={message.includes("已") ? "success-text" : "form-error"}>{message}</p>}
       </article>
     </div>
   );
