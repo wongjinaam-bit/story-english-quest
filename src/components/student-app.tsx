@@ -158,6 +158,13 @@ export function StudentApp() {
       </aside>
 
       <main className="main">
+        {student.mode === "local" && (
+          <div className="notice-box local-warning">
+            <strong>目前是本機模式</strong>
+            <p>這個模式的星星和進度只存在這台裝置，教師後台看不到。要讓老師看到，請登出後用「學生註冊 / 學生登入」的雲端帳號進入。</p>
+          </div>
+        )}
+
         <header className="topbar">
           <div>
             <p className="eyebrow">For Primary Students</p>
@@ -368,7 +375,7 @@ function StudentLogin({ onEnter }: { onEnter: (student: StudentSession) => Promi
           <button className="btn secondary full" onClick={() => setMode(mode === "login" ? "register" : "login")}>
             {mode === "login" ? "還沒有帳號？註冊學生帳號" : "已有帳號？回到登入"}
           </button>
-          <p className="muted">示範登入仍可用，但只保存於本機瀏覽器。</p>
+          <p className="muted">示範登入只保存於本機瀏覽器，教師後台看不到。正式測試請使用上方學生帳號登入。</p>
           <div className="btns">
             <button className="btn secondary" onClick={() => localDemoLogin("Amy", "S001", "⭐")}>Amy S001</button>
             <button className="btn secondary" onClick={() => localDemoLogin("Ben", "S002", "🚀")}>Ben S002</button>

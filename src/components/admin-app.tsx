@@ -29,6 +29,7 @@ export function AdminApp() {
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [loadingStudents, setLoadingStudents] = useState(false);
+  const [lastLoadedAt, setLastLoadedAt] = useState<string | null>(null);
   const supabaseReady = isSupabaseReady();
 
   async function login(email: string, password: string) {
@@ -61,28 +62,41 @@ export function AdminApp() {
     setProfile(null);
     setStudents([]);
     setSelectedStudentId(null);
+    setLastLoadedAt(null);
+  }
+
+  async function loadStudents() {
+    if (!loggedIn || !supabaseReady || !supabase) return;
+    setLoadingStudents(true);
+    const [profilesResult, progressResult] = await Promise.all([
+      supabase.from("profiles").select("*").eq("role", "student").order("created_at", { ascending: false }),
+      supabase.from("student_app_state").select("student_id, progress, updated_at")
+    ]);
+
+    if (profilesResult.error || progressResult.error) {
+      setError(profilesResult.error?.message || progressResult.error?.message || "讀取學生資料失敗。");
+      setLoadingStudents(false);
+      return;
+    }
+
+    const progressMap = new Map<string, { progress: StudentProgress; updated_at: string }>();
+    (progressResult.data || []).forEach((item: any) => progressMap.set(item.student_id, { progress: item.progress, updated_at: item.updated_at }));
+    const rows = (profilesResult.data || []).map((item) => {
+      const saved = progressMap.get(item.id);
+      return {
+        profile: item as Profile,
+        progress: saved?.progress || null,
+        updated_at: saved?.updated_at || null
+      };
+    });
+    setStudents(rows);
+    setLastLoadedAt(new Date().toISOString());
+    setLoadingStudents(false);
   }
 
   useEffect(() => {
-    if (!loggedIn || !supabaseReady || !supabase) return;
-    setLoadingStudents(true);
-    Promise.all([
-      supabase.from("profiles").select("*").eq("role", "student").order("created_at", { ascending: false }),
-      supabase.from("student_app_state").select("student_id, progress, updated_at")
-    ]).then(([profilesResult, progressResult]) => {
-      const progressMap = new Map<string, { progress: StudentProgress; updated_at: string }>();
-      (progressResult.data || []).forEach((item: any) => progressMap.set(item.student_id, { progress: item.progress, updated_at: item.updated_at }));
-      const rows = (profilesResult.data || []).map((item) => {
-        const saved = progressMap.get(item.id);
-        return {
-          profile: item as Profile,
-          progress: saved?.progress || null,
-          updated_at: saved?.updated_at || null
-        };
-      });
-      setStudents(rows);
-      setLoadingStudents(false);
-    });
+    loadStudents();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loggedIn, supabaseReady]);
 
   if (!loggedIn) {
@@ -155,6 +169,14 @@ export function AdminApp() {
             <p className="eyebrow">Management</p>
             <h2>{adminTitle(tab)}</h2>
           </div>
+          {supabaseReady && (
+            <div className="admin-actions">
+              <button className="btn secondary" onClick={loadStudents} disabled={loadingStudents}>
+                {loadingStudents ? "讀取中..." : "重新整理學生資料"}
+              </button>
+              {lastLoadedAt && <small>最後更新：{new Date(lastLoadedAt).toLocaleTimeString("zh-Hant")}</small>}
+            </div>
+          )}
         </header>
         {tab === "dashboard" && <Dashboard students={students} loading={loadingStudents} supabaseReady={supabaseReady} />}
         {tab === "students" && (
