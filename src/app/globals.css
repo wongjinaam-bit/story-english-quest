@@ -27,6 +27,7 @@ body {
 }
 button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
+button:disabled { cursor: not-allowed; opacity: .62; box-shadow: none; }
 a { color: inherit; text-decoration: none; }
 
 .shell { display: grid; grid-template-columns: 280px 1fr; min-height: 100vh; }
@@ -73,17 +74,22 @@ h3 { margin: 0; font-size: 24px; }
 .btn {
   min-height: 48px; border: 0; border-radius: 14px; padding: 0 18px; font-weight: 900;
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  text-align: center;
 }
 .btn.primary { background: var(--primary); color: white; box-shadow: 0 12px 24px rgba(78,124,255,.24); }
 .btn.secondary { background: #fff; color: var(--primary-dark); border: 1px solid var(--line); }
 .btn.ghost { background: var(--soft-blue); color: var(--primary-dark); }
 .btn.full { width: 100%; }
 .grid { display: grid; gap: 16px; }
-.grid.cards { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+.grid.cards { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); align-items: stretch; }
 .grid.two { grid-template-columns: minmax(0,1fr) 360px; align-items: start; }
 .section-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 28px 0 14px; }
 .card, .panel, .task-card, .word-card { border-radius: 20px; padding: 20px; }
-.lesson-card { position: relative; min-height: 230px; display: grid; gap: 12px; align-content: start; }
+.card, .lesson-card, .word-card { min-width: 0; }
+.card { display: flex; flex-direction: column; gap: 12px; }
+.card .progress { margin-top: auto; }
+.lesson-card { position: relative; min-height: 260px; display: flex; flex-direction: column; gap: 12px; }
+.lesson-card .btn { margin-top: auto; }
 .lesson-cover { width: 76px; height: 76px; display: grid; place-items: center; border-radius: 22px; background: var(--soft-blue); font-size: 42px; }
 .pill { display: inline-flex; width: fit-content; align-items: center; border-radius: 999px; padding: 6px 11px; background: var(--soft-mint); color: #13775d; font-size: 13px; font-weight: 900; }
 .pill.blue { background: var(--soft-blue); color: var(--primary-dark); }
@@ -91,8 +97,21 @@ h3 { margin: 0; font-size: 24px; }
 .progress span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--primary), var(--mint)); }
 .story-line { display: grid; grid-template-columns: 76px 1fr auto; gap: 14px; align-items: center; padding: 14px; border-radius: 18px; background: #f9fbff; border: 1px solid var(--line); margin: 12px 0; }
 .story-line .pic { display: grid; place-items: center; width: 62px; height: 62px; border-radius: 18px; background: white; font-size: 34px; }
-.word-card strong { display: block; margin: 10px 0 4px; font-size: 28px; }
+.word-card {
+  min-height: 370px;
+  display: flex;
+  flex-direction: column;
+}
+.word-card-body { flex: 1; min-width: 0; }
+.word-card strong { display: block; margin: 10px 0 4px; font-size: 28px; overflow-wrap: anywhere; }
 .word-card .emoji { font-size: 48px; }
+.word-actions { margin-top: auto; }
+.word-actions .btn { flex: 1 1 96px; padding: 0 14px; }
+.success-text {
+  margin: 10px 0 0;
+  color: #13775d;
+  font-weight: 900;
+}
 .task-card { margin-bottom: 14px; }
 .options { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin-top: 14px; }
 .option {

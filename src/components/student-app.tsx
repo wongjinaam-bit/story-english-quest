@@ -106,6 +106,10 @@ export function StudentApp() {
     return correct;
   }
 
+  function markVocabulary(word: string, known: boolean) {
+    mutateProgress((draft) => recordAnswer(draft, lesson.id, "read", `單字：${word}`, known));
+  }
+
   return (
     <div className="shell">
       <aside className="side">
@@ -184,6 +188,9 @@ export function StudentApp() {
                   <h3>{taskName(skill)}</h3>
                   <p className="muted">{lessonSkills.includes(skill) ? "已完成，做得好！" : "尚未完成"}</p>
                   <div className="progress"><span style={{ width: lessonSkills.includes(skill) ? "100%" : "20%" }} /></div>
+                  <button className="btn secondary full" onClick={() => setScreen(skill)}>
+                    {lessonSkills.includes(skill) ? "再練一次" : "開始任務"}
+                  </button>
                 </div>
               ))}
             </div>
@@ -203,7 +210,7 @@ export function StudentApp() {
                     <span className={completed ? "pill" : "pill blue"}>{completed ? "已完成" : unlocked ? "可開始" : "未解鎖"}</span>
                     <h3>{item.title}</h3>
                     <p className="muted">{item.topic} · Level {item.level}</p>
-                    <button className="btn primary" disabled={!unlocked} onClick={() => { setLessonId(item.id); setScreen("story"); }}>
+                    <button className={unlocked ? "btn primary full" : "btn secondary full"} disabled={!unlocked} onClick={() => { setLessonId(item.id); setScreen("story"); }}>
                       {unlocked ? "進入故事" : "先完成前一關"}
                     </button>
                   </article>
@@ -214,7 +221,7 @@ export function StudentApp() {
         )}
 
         {screen === "story" && <Story lesson={lesson} showZh={showZh} setShowZh={setShowZh} speed={speed} setSpeed={setSpeed} speak={speak} next={() => setScreen("vocab")} />}
-        {screen === "vocab" && <Vocabulary lesson={lesson} speak={speak} next={() => setScreen("listen")} />}
+        {screen === "vocab" && <Vocabulary lesson={lesson} speak={speak} next={() => setScreen("listen")} onMark={markVocabulary} />}
         {screen === "listen" && <QuizTask lesson={lesson} skill="listen" questions={lesson.listen} speak={speak} onAnswer={answerQuestion} onDone={() => { completeSkill("listen"); setScreen("speak"); }} />}
         {screen === "speak" && <SpeakTask lesson={lesson} speak={speak} onDone={() => { completeSkill("speak"); setScreen("read"); }} />}
         {screen === "read" && <QuizTask lesson={lesson} skill="read" questions={lesson.read} speak={speak} onAnswer={answerQuestion} onDone={() => { completeSkill("read"); setScreen("write"); }} />}
@@ -405,22 +412,38 @@ function Story({ lesson, showZh, setShowZh, speed, setSpeed, speak, next }: {
   );
 }
 
-function Vocabulary({ lesson, speak, next }: { lesson: Lesson; speak: (text: string) => void; next: () => void }) {
+function Vocabulary({ lesson, speak, next, onMark }: {
+  lesson: Lesson;
+  speak: (text: string) => void;
+  next: () => void;
+  onMark: (word: string, known: boolean) => void;
+}) {
+  const [marked, setMarked] = useState<Record<string, "known" | "review">>({});
+
+  function mark(word: string, value: "known" | "review") {
+    setMarked((current) => ({ ...current, [word]: value }));
+    onMark(word, value === "known");
+  }
+
   return (
     <section>
       <div className="section-title"><h3>故事重點單字</h3><button className="btn primary" onClick={next}>下一步：聽力任務</button></div>
       <div className="grid cards">
         {lesson.words.map((item) => (
           <article className="word-card" key={item.word}>
-            <div className="emoji">{item.image}</div>
-            <span className="pill">{item.level}</span>
-            <strong>{item.word}</strong>
-            <p>{item.meaning} · {item.part}</p>
-            <p className="muted">{item.example}<br />{item.translation}</p>
-            <div className="btns">
+            <div className="word-card-body">
+              <div className="emoji">{item.image}</div>
+              <span className="pill">{item.level}</span>
+              <strong>{item.word}</strong>
+              <p>{item.meaning} · {item.part}</p>
+              <p className="muted">{item.example}<br />{item.translation}</p>
+              {marked[item.word] === "known" && <p className="success-text">已記錄：我會了，獲得 1 顆星。</p>}
+              {marked[item.word] === "review" && <p className="form-error">已加入再挑戰，之後可以複習。</p>}
+            </div>
+            <div className="btns word-actions">
               <button className="btn secondary" onClick={() => speak(item.word)}>發音</button>
-              <button className="btn ghost">我會了</button>
-              <button className="btn ghost">需要複習</button>
+              <button className="btn ghost" onClick={() => mark(item.word, "known")}>我會了</button>
+              <button className="btn ghost" onClick={() => mark(item.word, "review")}>需要複習</button>
             </div>
           </article>
         ))}

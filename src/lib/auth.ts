@@ -6,6 +6,23 @@ type AuthResult =
   | { ok: true; profile: Profile; session: StudentSession }
   | { ok: false; message: string };
 
+function friendlyAuthMessage(message: string) {
+  const text = message.toLowerCase();
+  if (text.includes("already registered") || text.includes("already exists")) {
+    return "這個學生帳號已經註冊過了，請改用「學生登入」。";
+  }
+  if (text.includes("invalid login credentials")) {
+    return "帳號或密碼不正確，請再檢查一次。";
+  }
+  if (text.includes("email not confirmed")) {
+    return "這個帳號還沒有完成 Email 驗證。若不想驗證，請到 Supabase 關閉 Email confirmation。";
+  }
+  if (text.includes("password")) {
+    return "密碼格式不符合要求，請使用至少 6 個字。";
+  }
+  return message;
+}
+
 export function isSupabaseReady() {
   return Boolean(supabase);
 }
@@ -33,7 +50,7 @@ export async function signUpStudent(params: {
     }
   });
 
-  if (error) return { ok: false, message: error.message };
+  if (error) return { ok: false, message: friendlyAuthMessage(error.message) };
   if (!data.user) return { ok: false, message: "註冊沒有成功，請再試一次。" };
 
   const profile = await upsertProfile({
@@ -57,7 +74,7 @@ export async function signInStudent(username: string, password: string): Promise
     password
   });
 
-  if (error) return { ok: false, message: error.message };
+  if (error) return { ok: false, message: friendlyAuthMessage(error.message) };
   if (!data.user) return { ok: false, message: "登入沒有成功，請檢查帳號密碼。" };
 
   const profile = await getOrCreateProfile(data.user.id, {
@@ -78,7 +95,7 @@ export async function signInStaff(email: string, password: string): Promise<{ ok
   if (!supabase) return { ok: false, message: "Supabase 還沒設定，暫時使用 demo 後台。" };
 
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) return { ok: false, message: error.message };
+  if (error) return { ok: false, message: friendlyAuthMessage(error.message) };
   if (!data.user) return { ok: false, message: "登入沒有成功，請檢查帳號密碼。" };
 
   const profile = await getProfile(data.user.id);
