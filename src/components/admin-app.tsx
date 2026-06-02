@@ -262,7 +262,7 @@ function Assignments({ students }: { students: StudentRow[] }) {
         </div>
         <div className="field"><label>課程</label><select>{appLessons.map((lesson) => <option key={lesson.id}>{lesson.title}</option>)}</select></div>
         <div className="field"><label>技能</label><select><option>全部</option><option>聽力</option><option>口說</option><option>閱讀</option><option>寫作</option></select></div>
-        <button className="btn primary" type="button">建立指定任務</button>
+        <button className="btn secondary" type="button" disabled>下一階段：建立指定任務</button>
       </form>
       <p className="muted">任務指定寫入資料庫會放在下一階段實作。</p>
     </article>
@@ -297,7 +297,7 @@ function AdminTools() {
         <article className="card" key={item}>
           <h3>{item}</h3>
           <p className="muted">下一階段會加入建立學生帳號、重設密碼與報告匯出。</p>
-          <button className="btn secondary">開啟</button>
+          <button className="btn secondary" disabled>下一階段開啟</button>
         </article>
       ))}
     </div>

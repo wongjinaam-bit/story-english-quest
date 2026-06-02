@@ -121,6 +121,8 @@ h3 { margin: 0; font-size: 24px; }
   font-weight: 900;
 }
 .task-card { margin-bottom: 14px; }
+.listening-controls { margin-top: 14px; }
+.listening-controls .btn { flex: 1 1 150px; }
 .options { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin-top: 14px; }
 .option {
   min-height: 64px; border: 2px solid var(--line); border-radius: 16px; background: #fff;

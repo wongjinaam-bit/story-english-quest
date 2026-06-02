@@ -87,11 +87,11 @@ export function StudentApp() {
     });
   }
 
-  function speak(text: string) {
+  function speak(text: string, rate = speed) {
     if (!window.speechSynthesis) return;
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = "en-US";
-    utterance.rate = speed;
+    utterance.rate = rate;
     window.speechSynthesis.cancel();
     window.speechSynthesis.speak(utterance);
   }
@@ -460,7 +460,7 @@ function QuizTask({ lesson, skill, questions, speak, onAnswer, onDone }: {
   lesson: Lesson;
   skill: Skill;
   questions: ChoiceQuestion[];
-  speak: (text: string) => void;
+  speak: (text: string, rate?: number) => void;
   onAnswer: (question: ChoiceQuestion, answer: string) => boolean;
   onDone: () => void;
 }) {
@@ -468,6 +468,22 @@ function QuizTask({ lesson, skill, questions, speak, onAnswer, onDone }: {
   const [feedback, setFeedback] = useState("");
   const [picked, setPicked] = useState("");
   const question = questions[index];
+
+  if (!question) {
+    return (
+      <section className="grid two">
+        <article className="panel">
+          <h3>{taskName(skill)} 內容準備中</h3>
+          <p className="muted">這一課的{taskName(skill)}題目還沒有建立。學生可以先完成故事和單字，正式版建議補齊每課 5 題以上。</p>
+          <button className="btn primary" onClick={onDone}>跳過這個任務</button>
+        </article>
+        <aside className="panel">
+          <h3>內容提醒</h3>
+          <p className="muted">為了避免學生卡住，沒有題目的任務會顯示清楚提示，而不是空白或壞掉。</p>
+        </aside>
+      </section>
+    );
+  }
 
   function choose(answer: string) {
     if (picked) return;
@@ -494,7 +510,16 @@ function QuizTask({ lesson, skill, questions, speak, onAnswer, onDone }: {
         <div className="task-card">
           <p className="eyebrow">Question</p>
           <h3>{question.prompt}</h3>
-          {question.audio && <button className="btn secondary" onClick={() => speak(question.audio || question.prompt)}><Headphones size={18} /> 重播音訊</button>}
+          {question.audio && (
+            <div className="btns listening-controls">
+              <button className="btn secondary" onClick={() => speak(question.audio || question.prompt, 0.9)}>
+                <Headphones size={18} /> 正常播放
+              </button>
+              <button className="btn ghost" onClick={() => speak(question.audio || question.prompt, 0.62)}>
+                慢速播放
+              </button>
+            </div>
+          )}
           <div className="options">
             {question.options.map((option) => (
               <button
@@ -521,6 +546,17 @@ function QuizTask({ lesson, skill, questions, speak, onAnswer, onDone }: {
 function SpeakTask({ lesson, speak, onDone }: { lesson: Lesson; speak: (text: string) => void; onDone: () => void }) {
   const [done, setDone] = useState<Record<string, boolean>>({});
   const allDone = lesson.speak.every((item) => done[item.id]);
+  if (!lesson.speak.length) {
+    return (
+      <section className="grid two">
+        <article className="panel">
+          <h3>Speak 口說內容準備中</h3>
+          <p className="muted">這一課還沒有口說任務。正式版建議每課加入 3 個跟讀任務和 1 個看圖說句子。</p>
+          <button className="btn primary" onClick={onDone}>跳過口說任務</button>
+        </article>
+      </section>
+    );
+  }
   return (
     <section className="grid two">
       <article className="panel">
@@ -550,6 +586,17 @@ function SpeakTask({ lesson, speak, onDone }: { lesson: Lesson; speak: (text: st
 function WriteTask({ lesson, onDone }: { lesson: Lesson; onDone: () => void }) {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const complete = lesson.write.every((item) => answers[item.id]?.trim());
+  if (!lesson.write.length) {
+    return (
+      <section className="grid two">
+        <article className="panel">
+          <h3>Write 寫作內容準備中</h3>
+          <p className="muted">這一課還沒有寫作任務。正式版建議每課加入句型填空和一句自由寫作。</p>
+          <button className="btn primary" onClick={onDone}>跳過寫作任務</button>
+        </article>
+      </section>
+    );
+  }
   return (
     <section className="grid two">
       <article className="panel">
