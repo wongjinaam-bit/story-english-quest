@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { appLessons } from "@/data/lessons";
 import { isSupabaseReady, signInStaff, signOut } from "@/lib/auth";
+import { mergePublishedLessons } from "@/lib/course-drafts";
 import { supabase } from "@/lib/supabase";
-import type { AppAssignment, CourseDraft, Profile, Skill, StudentProgress, UserRole } from "@/lib/types";
+import type { AppAssignment, CourseDraft, Lesson, Profile, Skill, StudentProgress, UserRole } from "@/lib/types";
 
 type AdminTab = "dashboard" | "students" | "assignments" | "courses" | "admin";
 
@@ -350,6 +351,7 @@ function Assignments({ students, teacher, supabaseReady }: { students: StudentRo
   const [dueDate, setDueDate] = useState("");
   const [note, setNote] = useState("");
   const [assignments, setAssignments] = useState<AppAssignment[]>([]);
+  const [assignableLessons, setAssignableLessons] = useState<Lesson[]>(appLessons);
   const [message, setMessage] = useState("");
 
   useEffect(() => {
@@ -366,8 +368,20 @@ function Assignments({ students, teacher, supabaseReady }: { students: StudentRo
     setAssignments((data || []) as AppAssignment[]);
   }
 
+  async function loadAssignableLessons() {
+    if (!supabaseReady || !supabase) return;
+    const { data, error } = await supabase.from("course_drafts").select("*").eq("status", "published");
+    if (error) return;
+    const nextLessons = mergePublishedLessons(appLessons, (data || []) as CourseDraft[]);
+    setAssignableLessons(nextLessons);
+    if (!nextLessons.some((lesson) => lesson.id === lessonId)) {
+      setLessonId(nextLessons[0]?.id || appLessons[0].id);
+    }
+  }
+
   useEffect(() => {
     loadAssignments();
+    loadAssignableLessons();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supabaseReady]);
 
@@ -403,7 +417,7 @@ function Assignments({ students, teacher, supabaseReady }: { students: StudentRo
   }
 
   const studentName = (id: string) => students.find((row) => row.profile.id === id)?.profile.name || "學生";
-  const lessonTitle = (id: string) => appLessons.find((lesson) => lesson.id === id)?.title || id;
+  const lessonTitle = (id: string) => assignableLessons.find((lesson) => lesson.id === id)?.title || id;
   const allSelected = students.length > 0 && selectedStudentIds.length === students.length;
 
   function toggleStudent(id: string) {
@@ -437,8 +451,9 @@ function Assignments({ students, teacher, supabaseReady }: { students: StudentRo
           <div className="field">
             <label>課程</label>
             <select value={lessonId} onChange={(event) => setLessonId(event.target.value)}>
-              {appLessons.map((lesson) => <option key={lesson.id} value={lesson.id}>{lesson.title}</option>)}
+              {assignableLessons.map((lesson) => <option key={lesson.id} value={lesson.id}>{lesson.title}</option>)}
             </select>
+            <small>這裡會包含已發布到學生端的自訂課程。</small>
           </div>
           <div className="field">
             <label>技能</label>

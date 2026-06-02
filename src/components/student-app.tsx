@@ -51,7 +51,7 @@ export function StudentApp() {
   const lesson = useMemo(() => lessons.find((item) => item.id === lessonId) || lessons[0] || appLessons[0], [lessonId, lessons]);
 
   const loadPublishedCourses = useCallback(async () => {
-    if (!supabase) return;
+    if (!supabase) return appLessons;
     const { data, error } = await supabase
       .from("course_drafts")
       .select("*")
@@ -59,14 +59,33 @@ export function StudentApp() {
       .order("updated_at", { ascending: false });
     if (error) {
       setCloudStatus(`課程更新提醒：${error.message}`);
-      return;
+      return appLessons;
     }
     const nextLessons = mergePublishedLessons(appLessons, (data || []) as CourseDraft[]);
     setLessons(nextLessons);
     if (!nextLessons.some((item) => item.id === lessonId)) {
       setLessonId(nextLessons[0]?.id || appLessons[0].id);
     }
+    return nextLessons;
   }, [lessonId]);
+
+  const loadStudentAssignments = useCallback(async () => {
+    if (!student || student.mode !== "supabase" || !supabase) {
+      setAssignments([]);
+      return;
+    }
+    const { data, error } = await supabase
+      .from("app_assignments")
+      .select("*")
+      .eq("student_id", student.id)
+      .eq("status", "assigned")
+      .order("created_at", { ascending: false });
+    if (error) {
+      setCloudStatus(`任務更新提醒：${error.message}`);
+      return;
+    }
+    setAssignments((data || []) as AppAssignment[]);
+  }, [student]);
 
   useEffect(() => {
     const savedStudent = loadStudentSession();
@@ -85,23 +104,20 @@ export function StudentApp() {
   useEffect(() => {
     if (!student) return;
     loadPublishedCourses();
-
-    if (student.mode !== "supabase" || !supabase) return;
-
-    supabase
-      .from("app_assignments")
-      .select("*")
-      .eq("student_id", student.id)
-      .eq("status", "assigned")
-      .order("created_at", { ascending: false })
-      .then(({ data }) => setAssignments((data || []) as AppAssignment[]));
-  }, [loadPublishedCourses, student]);
+    loadStudentAssignments();
+  }, [loadPublishedCourses, loadStudentAssignments, student]);
 
   useEffect(() => {
     if (screen === "map") {
       loadPublishedCourses();
     }
   }, [loadPublishedCourses, screen]);
+
+  useEffect(() => {
+    if (screen === "home" || screen === "map") {
+      loadStudentAssignments();
+    }
+  }, [loadStudentAssignments, screen]);
 
   async function enterStudent(nextStudent: StudentSession) {
     saveStudentSession(nextStudent);
@@ -150,7 +166,10 @@ export function StudentApp() {
   }
 
   function completeSkill(skill: Skill) {
+    if (!progress) return;
+    const nextSkills = new Set([...(progress.completedSkills[lesson.id] || []), skill]);
     mutateProgress((draft) => recordSkill(draft, lesson.id, skill));
+    completeMatchingAssignments(lesson.id, skill, nextSkills.size >= 4);
   }
 
   function answerQuestion(question: ChoiceQuestion, answer: string) {
@@ -167,9 +186,28 @@ export function StudentApp() {
     mutateProgress((draft) => recordAnswer(draft, lesson.id, skill, label, correct));
   }
 
-  function startAssignment(assignment: AppAssignment) {
+  async function startAssignment(assignment: AppAssignment) {
+    const nextLessons = await loadPublishedCourses();
+    if (!nextLessons.some((item) => item.id === assignment.lesson_id)) {
+      setCloudStatus("任務課程尚未發布到學生端，請老師先到課程內容管理發布這門課。");
+      return;
+    }
     setLessonId(assignment.lesson_id);
     setScreen(assignment.skill === "all" ? "story" : assignment.skill);
+  }
+
+  async function completeMatchingAssignments(completedLessonId: string, completedSkill: Skill, lessonCompleted: boolean) {
+    const doneAssignments = assignments.filter((assignment) =>
+      assignment.lesson_id === completedLessonId &&
+      (assignment.skill === completedSkill || (assignment.skill === "all" && lessonCompleted))
+    );
+    if (!doneAssignments.length || !supabase) return;
+    const ids = doneAssignments.map((assignment) => assignment.id);
+    setAssignments((current) => current.filter((assignment) => !ids.includes(assignment.id)));
+    await supabase
+      .from("app_assignments")
+      .update({ status: "completed", completed_at: new Date().toISOString() })
+      .in("id", ids);
   }
 
   return (
@@ -212,7 +250,7 @@ export function StudentApp() {
         {student.mode === "local" && (
           <div className="notice-box local-warning">
             <strong>目前是本機模式</strong>
-            <p>這個模式的星星和進度只存在這台裝置，教師後台看不到。要讓老師看到，請登出後用「學生註冊 / 學生登入」的雲端帳號進入。</p>
+            <p>這個模式的星星、進度和老師指定任務只存在這台裝置，教師後台看不到。要接收老師任務，請登出後用「學生註冊 / 學生登入」的雲端帳號進入。</p>
           </div>
         )}
         {student.mode === "supabase" && cloudStatus && !cloudStatus.includes("已保存") && (
@@ -233,6 +271,17 @@ export function StudentApp() {
             <div className="stat"><strong>{Object.keys(progress.mistakes).length}</strong><small>再挑戰</small></div>
           </div>
         </header>
+
+        {student.mode === "supabase" && assignments.length > 0 && screen !== "home" && (
+          <div className="notice-box local-warning">
+            <strong>老師指定任務</strong>
+            <p>你有 {assignments.length} 個任務待完成。老師指定的課程會優先開放，即使課程地圖原本還未解鎖也可以開始。</p>
+            <div className="btns">
+              <button className="btn primary" type="button" onClick={() => startAssignment(assignments[0])}>開始最新任務</button>
+              <button className="btn secondary" type="button" onClick={() => setScreen("home")}>查看全部任務</button>
+            </div>
+          </div>
+        )}
 
         {screen === "home" && (
           <>
@@ -257,7 +306,13 @@ export function StudentApp() {
 
             {assignments.length > 0 && (
               <>
-                <div className="section-title"><h3>老師指定任務</h3><span className="pill blue">{assignments.length} 個任務</span></div>
+                <div className="section-title">
+                  <h3>老師指定任務</h3>
+                  <div className="admin-actions">
+                    <span className="pill blue">{assignments.length} 個任務</span>
+                    <button className="btn secondary" type="button" onClick={loadStudentAssignments}>重新整理任務</button>
+                  </div>
+                </div>
                 <div className="grid cards">
                   {assignments.map((item) => {
                     const assignedLesson = lessons.find((lesson) => lesson.id === item.lesson_id);
@@ -322,11 +377,15 @@ export function StudentApp() {
             <div className="grid cards">
               {lessons.map((item, index) => {
                 const completed = progress.completedLessons.includes(item.id);
-                const unlockState = getLessonUnlockState(item, index, lessons, progress.completedLessons);
+                const assigned = assignments.some((assignment) => assignment.lesson_id === item.id);
+                const unlockState = getLessonUnlockState(item, index, lessons, progress.completedLessons, assigned);
                 return (
                   <article className="card lesson-card" key={item.id}>
                     <div className="lesson-cover">{item.cover}</div>
-                    <span className={completed ? "pill" : "pill blue"}>{completed ? "已完成" : unlockState.unlocked ? "可開始" : "未解鎖"}</span>
+                    <div className="review-head">
+                      <span className={completed ? "pill" : "pill blue"}>{completed ? "已完成" : unlockState.unlocked ? "可開始" : "未解鎖"}</span>
+                      {assigned && <span className="pill">老師指定</span>}
+                    </div>
                     <h3>{item.title}</h3>
                     <p className="muted">{item.topic} · Level {item.level}</p>
                     <p className="muted">{unlockState.reason}</p>
@@ -353,9 +412,12 @@ export function StudentApp() {
   );
 }
 
-function getLessonUnlockState(item: Lesson, index: number, lessons: Lesson[], completedLessons: string[]) {
+function getLessonUnlockState(item: Lesson, index: number, lessons: Lesson[], completedLessons: string[], assigned = false) {
   if (completedLessons.includes(item.id)) {
     return { unlocked: true, reason: "你已完成這一課。", lockLabel: "已完成" };
+  }
+  if (assigned) {
+    return { unlocked: true, reason: "老師已指定這個任務，所以可以直接開始。", lockLabel: "開始老師任務" };
   }
   if (item.unlockMode === "open" || index === 0) {
     return { unlocked: true, reason: "老師設定為立即開放。", lockLabel: "可開始" };
