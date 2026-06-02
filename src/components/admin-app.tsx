@@ -511,13 +511,15 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
   }
 
   async function loadDrafts() {
-    if (!supabaseReady || !supabase) return;
+    if (!supabaseReady || !supabase) return [];
     const { data, error } = await supabase.from("course_drafts").select("*").order("updated_at", { ascending: false });
     if (error) {
-      setMessage("課程草稿資料表還沒建立，請先執行 teacher-tools-upgrade.sql。");
-      return;
+      setMessage(error.message.includes("course_drafts") ? "課程草稿資料表還沒建立，請先執行 teacher-tools-upgrade.sql。" : `讀取課程失敗：${error.message}`);
+      return [];
     }
-    setDrafts((data || []) as CourseDraft[]);
+    const nextDrafts = (data || []) as CourseDraft[];
+    setDrafts(nextDrafts);
+    return nextDrafts;
   }
 
   useEffect(() => {
@@ -613,7 +615,7 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
       return;
     }
     const id = editingId || title.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || `course-${Date.now()}`;
-    const { error } = await supabase.from("course_drafts").upsert({
+    const payload = {
       id,
       title: title.trim(),
       topic: topic.trim(),
@@ -631,12 +633,21 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
       },
       updated_by: teacher.id,
       updated_at: new Date().toISOString()
-    });
+    };
+    const { data, error } = await supabase
+      .from("course_drafts")
+      .upsert(payload, { onConflict: "id" })
+      .select("*")
+      .single();
     if (error) {
-      setMessage(error.message.includes("course_drafts") ? "課程草稿資料表還沒建立，請先執行 teacher-tools-upgrade.sql。" : error.message);
+      setMessage(error.message.includes("course_drafts") ? "課程草稿資料表還沒建立，請先執行 teacher-tools-upgrade.sql。" : `儲存失敗：${error.message}`);
       return;
     }
     setMessage(nextStatus === "published" ? "課程已發布到學生端。" : "課程草稿已儲存。");
+    if (data) {
+      const savedDraft = data as CourseDraft;
+      setDrafts((current) => [savedDraft, ...current.filter((item) => item.id !== savedDraft.id)]);
+    }
     resetDraftForm();
     await loadDrafts();
     setView("list");
@@ -842,7 +853,10 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
             <h3>課程內容管理</h3>
             <p className="muted">管理學生端會看到的課程。內建課程可編輯成自訂版本，自訂課程可發布、下架或刪除。</p>
           </div>
-          <button className="btn primary" type="button" onClick={newBlankCourse}>新增課程單元</button>
+          <div className="admin-actions">
+            <button className="btn secondary" type="button" onClick={loadDrafts}>重新讀取</button>
+            <button className="btn primary" type="button" onClick={newBlankCourse}>新增課程單元</button>
+          </div>
         </div>
         <table className="table">
           <thead><tr><th>課程</th><th>主題</th><th>Level</th><th>單字</th><th>狀態</th><th>操作</th></tr></thead>

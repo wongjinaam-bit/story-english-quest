@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Headphones, LogOut, Mic, QrCode, Sparkles, Star, UserRound } from "lucide-react";
 import { appLessons } from "@/data/lessons";
 import { isSupabaseReady, signInStudent, signOut, signUpStudent } from "@/lib/auth";
@@ -50,6 +50,24 @@ export function StudentApp() {
   const [lessons, setLessons] = useState(appLessons);
   const lesson = useMemo(() => lessons.find((item) => item.id === lessonId) || lessons[0] || appLessons[0], [lessonId, lessons]);
 
+  const loadPublishedCourses = useCallback(async () => {
+    if (!student || student.mode !== "supabase" || !supabase) return;
+    const { data, error } = await supabase
+      .from("course_drafts")
+      .select("*")
+      .eq("status", "published")
+      .order("updated_at", { ascending: false });
+    if (error) {
+      setCloudStatus(`課程更新提醒：${error.message}`);
+      return;
+    }
+    const nextLessons = mergePublishedLessons(appLessons, (data || []) as CourseDraft[]);
+    setLessons(nextLessons);
+    if (!nextLessons.some((item) => item.id === lessonId)) {
+      setLessonId(nextLessons[0]?.id || appLessons[0].id);
+    }
+  }, [lessonId, student]);
+
   useEffect(() => {
     const savedStudent = loadStudentSession();
     if (savedStudent) {
@@ -66,11 +84,7 @@ export function StudentApp() {
 
   useEffect(() => {
     if (!student || student.mode !== "supabase" || !supabase) return;
-    supabase
-      .from("course_drafts")
-      .select("*")
-      .eq("status", "published")
-      .then(({ data }) => setLessons(mergePublishedLessons(appLessons, (data || []) as CourseDraft[])));
+    loadPublishedCourses();
 
     supabase
       .from("app_assignments")
@@ -79,7 +93,13 @@ export function StudentApp() {
       .eq("status", "assigned")
       .order("created_at", { ascending: false })
       .then(({ data }) => setAssignments((data || []) as AppAssignment[]));
-  }, [student]);
+  }, [loadPublishedCourses, student]);
+
+  useEffect(() => {
+    if (screen === "map") {
+      loadPublishedCourses();
+    }
+  }, [loadPublishedCourses, screen]);
 
   async function enterStudent(nextStudent: StudentSession) {
     saveStudentSession(nextStudent);
@@ -290,7 +310,13 @@ export function StudentApp() {
 
         {screen === "map" && (
           <section>
-            <div className="section-title"><h3>故事關卡地圖</h3><span className="pill">完成一關解鎖下一關</span></div>
+            <div className="section-title">
+              <h3>故事關卡地圖</h3>
+              <div className="admin-actions">
+                <span className="pill">完成一關解鎖下一關</span>
+                <button className="btn secondary" type="button" onClick={loadPublishedCourses}>重新整理課程</button>
+              </div>
+            </div>
             <div className="grid cards">
               {lessons.map((item, index) => {
                 const completed = progress.completedLessons.includes(item.id);
