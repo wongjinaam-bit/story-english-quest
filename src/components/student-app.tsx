@@ -78,6 +78,13 @@ export function StudentApp() {
 
   const activeStudent = student;
   const lessonSkills = progress.completedSkills[lesson.id] || [];
+  const nextSkill = (["listen", "speak", "read", "write"] as Skill[]).find((skill) => !lessonSkills.includes(skill));
+  const recommendedScreen: Screen = !lessonSkills.length ? "story" : nextSkill || "progress";
+  const recommendedLabel = !lessonSkills.length
+    ? "開始故事任務"
+    : nextSkill
+      ? `繼續${taskName(nextSkill)}`
+      : "查看學習成果";
 
   function mutateProgress(mutator: (draft: StudentProgress) => void) {
     setProgress((current) => {
@@ -173,7 +180,7 @@ export function StudentApp() {
                   嗨，{student.name}！今天跟著故事完成聽、說、讀、寫四個任務。每完成一個任務都會累積進度，全部完成後解鎖下一個故事。
                 </p>
                 <div className="btns">
-                  <button className="btn primary" onClick={() => setScreen("story")}><Sparkles size={18} /> 開始故事任務</button>
+                  <button className="btn primary" onClick={() => setScreen(recommendedScreen)}><Sparkles size={18} /> {recommendedLabel}</button>
                   <button className="btn secondary" onClick={() => setScreen("map")}>查看課程地圖</button>
                 </div>
               </div>
@@ -182,6 +189,22 @@ export function StudentApp() {
                 <strong>{lesson.topic}</strong>
                 <small>{lesson.pattern}</small>
               </div>
+            </section>
+
+            <section className="learning-path">
+              {[
+                { label: "故事", done: lessonSkills.length > 0 || progress.completedLessons.includes(lesson.id) },
+                { label: "單字", done: lessonSkills.length > 0 || progress.completedLessons.includes(lesson.id) },
+                { label: "聽力", done: lessonSkills.includes("listen") },
+                { label: "口說", done: lessonSkills.includes("speak") },
+                { label: "閱讀", done: lessonSkills.includes("read") },
+                { label: "寫作", done: lessonSkills.includes("write") }
+              ].map((step, index) => (
+                <div className={step.done ? "path-step done" : "path-step"} key={step.label}>
+                  <strong>{index + 1}</strong>
+                  <span>{step.label}</span>
+                </div>
+              ))}
             </section>
 
             <div className="section-title"><h3>四項任務進度</h3></div>
@@ -639,8 +662,13 @@ function Review({ progress, speak, onAnswer }: {
   onAnswer: (label: string, skill: Skill, correct: boolean) => void;
 }) {
   const items = Object.values(progress.mistakes);
+  const [filter, setFilter] = useState<"all" | "due" | "later">("all");
   const [picked, setPicked] = useState<Record<string, string>>({});
   const [feedback, setFeedback] = useState<Record<string, string>>({});
+  const today = new Date().toISOString().slice(0, 10);
+  const dueItems = items.filter((item) => item.nextReview <= today);
+  const laterItems = items.filter((item) => item.nextReview > today);
+  const visibleItems = filter === "due" ? dueItems : filter === "later" ? laterItems : items;
 
   function choose(item: { label: string; skill: Skill }, question: ChoiceQuestion, answer: string) {
     const correct = answer === question.answer;
@@ -654,9 +682,20 @@ function Review({ progress, speak, onAnswer }: {
 
   return (
     <section>
-      <div className="section-title"><h3>再挑戰</h3><span className="pill blue">{items.length} 個項目</span></div>
+      <div className="section-title">
+        <div>
+          <h3>再挑戰</h3>
+          <p className="muted">答錯或標記需要複習的內容會進入這裡，按日期安排複習。</p>
+        </div>
+        <span className="pill blue">{items.length} 個項目</span>
+      </div>
+      <div className="segmented">
+        <button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>全部 {items.length}</button>
+        <button className={filter === "due" ? "active" : ""} onClick={() => setFilter("due")}>今天要複習 {dueItems.length}</button>
+        <button className={filter === "later" ? "active" : ""} onClick={() => setFilter("later")}>之後複習 {laterItems.length}</button>
+      </div>
       <div className="grid cards">
-        {items.length ? items.map((item) => {
+        {visibleItems.length ? visibleItems.map((item) => {
           const context = findReviewContext(item.label);
           const selected = picked[item.label];
           return (
@@ -714,7 +753,7 @@ function Review({ progress, speak, onAnswer }: {
               </div>
             </article>
           );
-        }) : <div className="panel"><h3>目前沒有錯題</h3><p className="muted">做得很好，答錯的題目會出現在這裡。</p></div>}
+        }) : <div className="panel"><h3>這一類目前沒有項目</h3><p className="muted">做得很好。答錯或需要複習的內容會出現在這裡。</p></div>}
       </div>
     </section>
   );

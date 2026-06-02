@@ -27,6 +27,7 @@ export function AdminApp() {
   const [tab, setTab] = useState<AdminTab>("dashboard");
   const [error, setError] = useState("");
   const [students, setStudents] = useState<StudentRow[]>([]);
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [loadingStudents, setLoadingStudents] = useState(false);
   const supabaseReady = isSupabaseReady();
 
@@ -59,6 +60,7 @@ export function AdminApp() {
     setLoggedIn(false);
     setProfile(null);
     setStudents([]);
+    setSelectedStudentId(null);
   }
 
   useEffect(() => {
@@ -155,7 +157,15 @@ export function AdminApp() {
           </div>
         </header>
         {tab === "dashboard" && <Dashboard students={students} loading={loadingStudents} supabaseReady={supabaseReady} />}
-        {tab === "students" && <Students students={students} loading={loadingStudents} supabaseReady={supabaseReady} />}
+        {tab === "students" && (
+          <Students
+            students={students}
+            loading={loadingStudents}
+            supabaseReady={supabaseReady}
+            selectedStudentId={selectedStudentId}
+            onSelectStudent={setSelectedStudentId}
+          />
+        )}
         {tab === "assignments" && <Assignments students={students} />}
         {tab === "courses" && <Courses />}
         {tab === "admin" && <AdminTools />}
@@ -208,7 +218,25 @@ function Dashboard({ students, loading, supabaseReady }: { students: StudentRow[
   );
 }
 
-function Students({ students, loading, supabaseReady }: { students: StudentRow[]; loading: boolean; supabaseReady: boolean }) {
+function skillPercent(progress: StudentProgress | null, skill: "listen" | "speak" | "read" | "write") {
+  const answers = progress?.answers.filter((item) => item.skill === skill) || [];
+  if (!answers.length) return 0;
+  return Math.round((answers.filter((item) => item.correct).length / answers.length) * 100);
+}
+
+function Students({
+  students,
+  loading,
+  supabaseReady,
+  selectedStudentId,
+  onSelectStudent
+}: {
+  students: StudentRow[];
+  loading: boolean;
+  supabaseReady: boolean;
+  selectedStudentId: string | null;
+  onSelectStudent: (id: string | null) => void;
+}) {
   if (!supabaseReady) {
     return (
       <article className="panel">
@@ -225,27 +253,71 @@ function Students({ students, loading, supabaseReady }: { students: StudentRow[]
     );
   }
 
+  const selected = students.find((row) => row.profile.id === selectedStudentId) || students[0] || null;
+  const mistakes = Object.values(selected?.progress?.mistakes || {}).sort((a, b) => b.count - a.count);
+
   return (
-    <article className="panel">
-      <h3>學生列表</h3>
-      {loading ? <p className="muted">載入學生資料中...</p> : (
-        <table className="table">
-          <thead><tr><th>學生</th><th>帳號</th><th>完成故事</th><th>星星</th><th>錯題</th><th>最後更新</th></tr></thead>
-          <tbody>
-            {students.map((row) => (
-              <tr key={row.profile.id}>
-                <td>{row.profile.avatar || "⭐"} {row.profile.name}</td>
-                <td>{row.profile.username}</td>
-                <td>{row.progress?.completedLessons.length || 0}</td>
-                <td>{row.progress?.stars || 0}</td>
-                <td>{Object.keys(row.progress?.mistakes || {}).length}</td>
-                <td>{row.updated_at ? new Date(row.updated_at).toLocaleString("zh-Hant") : "尚未開始"}</td>
-              </tr>
+    <div className="grid two teacher-student-layout">
+      <article className="panel">
+        <h3>學生列表</h3>
+        {loading ? <p className="muted">載入學生資料中...</p> : (
+          <table className="table">
+            <thead><tr><th>學生</th><th>帳號</th><th>完成故事</th><th>星星</th><th>錯題</th><th>最後更新</th></tr></thead>
+            <tbody>
+              {students.map((row) => (
+                <tr
+                  key={row.profile.id}
+                  className={selected?.profile.id === row.profile.id ? "selected-row" : ""}
+                  onClick={() => onSelectStudent(row.profile.id)}
+                >
+                  <td>{row.profile.avatar || "⭐"} {row.profile.name}</td>
+                  <td>{row.profile.username}</td>
+                  <td>{row.progress?.completedLessons.length || 0}</td>
+                  <td>{row.progress?.stars || 0}</td>
+                  <td>{Object.keys(row.progress?.mistakes || {}).length}</td>
+                  <td>{row.updated_at ? new Date(row.updated_at).toLocaleString("zh-Hant") : "尚未開始"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </article>
+
+      <aside className="panel student-detail-panel">
+        {selected ? (
+          <>
+            <div className="section-title compact">
+              <h3>{selected.profile.avatar || "⭐"} {selected.profile.name}</h3>
+              <span className="pill blue">{selected.profile.username}</span>
+            </div>
+            <div className="metric-grid compact-metrics">
+              <div className="metric"><strong>{selected.progress?.completedLessons.length || 0}</strong><small>完成故事</small></div>
+              <div className="metric"><strong>{selected.progress?.stars || 0}</strong><small>星星</small></div>
+              <div className="metric"><strong>{mistakes.length}</strong><small>需要複習</small></div>
+              <div className="metric"><strong>{selected.progress?.badges.length || 0}</strong><small>徽章</small></div>
+            </div>
+
+            <h3>技能表現</h3>
+            {(["listen", "speak", "read", "write"] as const).map((skill) => (
+              <div className="bar-row" key={skill}>
+                <label><span>{skill}</span><span>{skillPercent(selected.progress, skill)}%</span></label>
+                <div className="progress"><span style={{ width: `${skillPercent(selected.progress, skill)}%` }} /></div>
+              </div>
             ))}
-          </tbody>
-        </table>
-      )}
-    </article>
+
+            <h3>常錯項目</h3>
+            {mistakes.length ? mistakes.slice(0, 5).map((item) => (
+              <p className="mistake-line" key={item.label}>
+                <strong>{item.label}</strong>
+                <small>{item.skill} · 錯 {item.count} 次 · {item.nextReview}</small>
+              </p>
+            )) : <p className="muted">目前沒有錯題。</p>}
+          </>
+        ) : (
+          <p className="muted">還沒有學生資料。學生註冊並開始學習後，這裡會出現詳情。</p>
+        )}
+      </aside>
+    </div>
   );
 }
 

@@ -70,6 +70,41 @@ h3 { margin: 0; font-size: 24px; }
 .hero p { max-width: 680px; color: var(--muted); line-height: 1.65; font-size: 17px; }
 .mascot { display: grid; place-items: center; text-align: center; border-radius: 22px; background: #fff; border: 1px solid var(--line); min-height: 240px; }
 .mascot span { font-size: 92px; display: block; }
+.learning-path {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  margin: 16px 0 4px;
+}
+.path-step {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  padding: 14px 8px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255,255,255,.82);
+  color: var(--muted);
+  font-weight: 900;
+}
+.path-step strong {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--soft-blue);
+  color: var(--primary-dark);
+}
+.path-step.done {
+  background: var(--soft-mint);
+  color: #13775d;
+  border-color: #c7f2e5;
+}
+.path-step.done strong {
+  background: #d5f8ec;
+  color: #13775d;
+}
 .btns { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 22px; }
 .btn {
   min-height: 48px; border: 0; border-radius: 14px; padding: 0 18px; font-weight: 900;
@@ -84,6 +119,7 @@ h3 { margin: 0; font-size: 24px; }
 .grid.cards { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); align-items: stretch; }
 .grid.two { grid-template-columns: minmax(0,1fr) 360px; align-items: start; }
 .section-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 28px 0 14px; }
+.section-title.compact { margin-top: 0; }
 .card, .panel, .task-card, .word-card { border-radius: 20px; padding: 20px; }
 .card, .lesson-card, .word-card { min-width: 0; }
 .card { display: flex; flex-direction: column; gap: 12px; }
@@ -115,6 +151,29 @@ h3 { margin: 0; font-size: 24px; }
 .review-options .option { min-height: 52px; }
 .review-actions { margin-top: auto; }
 .review-actions .btn { flex: 1 1 112px; padding: 0 14px; }
+.segmented {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255,255,255,.74);
+  margin-bottom: 16px;
+}
+.segmented button {
+  min-height: 40px;
+  border: 0;
+  border-radius: 12px;
+  padding: 0 14px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 900;
+}
+.segmented button.active {
+  background: var(--primary);
+  color: #fff;
+}
 .success-text {
   margin: 10px 0 0;
   color: #13775d;
@@ -140,6 +199,21 @@ h3 { margin: 0; font-size: 24px; }
 .table { width: 100%; border-collapse: collapse; overflow: hidden; border-radius: 16px; background: white; }
 .table th, .table td { text-align: left; padding: 14px; border-bottom: 1px solid var(--line); }
 .table th { color: var(--muted); font-size: 13px; }
+.table tbody tr { cursor: pointer; }
+.table tbody tr:hover, .table tbody tr.selected-row { background: #f4f7ff; }
+.teacher-student-layout { grid-template-columns: minmax(0,1fr) 390px; }
+.student-detail-panel { position: sticky; top: 22px; }
+.compact-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); margin: 12px 0 18px; }
+.compact-metrics .metric { min-height: 94px; padding: 14px; }
+.mistake-line {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #f9fbff;
+}
+.mistake-line small { display: block; }
 .form { display: grid; gap: 12px; max-width: 520px; }
 .field { display: grid; gap: 7px; }
 .field input, .field textarea, .field select {
@@ -233,6 +307,9 @@ h3 { margin: 0; font-size: 24px; }
   .nav button { text-align: center; padding: 12px 8px; }
   .main, .admin-main { padding: 18px; }
   .hero, .grid.two { grid-template-columns: 1fr; }
+  .learning-path { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .teacher-student-layout { grid-template-columns: 1fr; }
+  .student-detail-panel { position: static; }
   .metric-grid { grid-template-columns: repeat(2,1fr); }
 }
 @media (max-width: 560px) {
@@ -240,6 +317,7 @@ h3 { margin: 0; font-size: 24px; }
   .stat-row, .options, .metric-grid, .nav { grid-template-columns: 1fr; display: grid; }
   .hero { padding: 20px; }
   .hero h3 { font-size: 38px; }
+  .learning-path { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .story-line { grid-template-columns: 1fr; }
   .avatar-grid { grid-template-columns: repeat(3, 1fr); }
 }
