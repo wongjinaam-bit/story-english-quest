@@ -35,6 +35,7 @@ drop policy if exists "Students can read own app assignments" on public.app_assi
 drop policy if exists "Teachers can manage app assignments" on public.app_assignments;
 drop policy if exists "Staff can manage course drafts" on public.course_drafts;
 drop policy if exists "Authenticated users can read course drafts" on public.course_drafts;
+drop policy if exists "Anyone can read published course drafts" on public.course_drafts;
 
 create policy "Students can read own app assignments"
   on public.app_assignments for select
@@ -53,3 +54,7 @@ create policy "Staff can manage course drafts"
 create policy "Authenticated users can read course drafts"
   on public.course_drafts for select
   using (auth.role() = 'authenticated');
+
+create policy "Anyone can read published course drafts"
+  on public.course_drafts for select
+  using (status = 'published');

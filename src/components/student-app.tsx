@@ -51,7 +51,7 @@ export function StudentApp() {
   const lesson = useMemo(() => lessons.find((item) => item.id === lessonId) || lessons[0] || appLessons[0], [lessonId, lessons]);
 
   const loadPublishedCourses = useCallback(async () => {
-    if (!student || student.mode !== "supabase" || !supabase) return;
+    if (!supabase) return;
     const { data, error } = await supabase
       .from("course_drafts")
       .select("*")
@@ -66,7 +66,7 @@ export function StudentApp() {
     if (!nextLessons.some((item) => item.id === lessonId)) {
       setLessonId(nextLessons[0]?.id || appLessons[0].id);
     }
-  }, [lessonId, student]);
+  }, [lessonId]);
 
   useEffect(() => {
     const savedStudent = loadStudentSession();
@@ -83,8 +83,10 @@ export function StudentApp() {
   }, [progress, student]);
 
   useEffect(() => {
-    if (!student || student.mode !== "supabase" || !supabase) return;
+    if (!student) return;
     loadPublishedCourses();
+
+    if (student.mode !== "supabase" || !supabase) return;
 
     supabase
       .from("app_assignments")
