@@ -616,6 +616,20 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
     await loadDrafts();
   }
 
+  async function setDraftStatus(id: string, status: "draft" | "published") {
+    if (!supabaseReady || !supabase) return;
+    const { error } = await supabase
+      .from("course_drafts")
+      .update({ status, updated_at: new Date().toISOString(), updated_by: teacher?.id || null })
+      .eq("id", id);
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+    setMessage(status === "published" ? "課程已發布到學生端。" : "課程已下架，學生端不會顯示。");
+    await loadDrafts();
+  }
+
   return (
     <div className="grid two">
       <article className="panel">
@@ -667,6 +681,9 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
               <small>{draft.topic} · Level {draft.level} · {draft.status}</small>
               <div className="btns">
                 <button className="btn secondary" onClick={() => editDraft(draft)}>編輯</button>
+                <button className="btn primary" onClick={() => setDraftStatus(draft.id, draft.status === "published" ? "draft" : "published")}>
+                  {draft.status === "published" ? "下架" : "發布到學生端"}
+                </button>
                 <button className="btn ghost" onClick={() => deleteDraft(draft.id)}>刪除</button>
               </div>
             </div>

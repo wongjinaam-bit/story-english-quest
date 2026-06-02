@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Headphones, LogOut, Mic, QrCode, Sparkles, Star, UserRound } from "lucide-react";
 import { appLessons } from "@/data/lessons";
 import { isSupabaseReady, signInStudent, signOut, signUpStudent } from "@/lib/auth";
+import { mergePublishedLessons } from "@/lib/course-drafts";
 import { supabase } from "@/lib/supabase";
 import {
   clearStudentSession,
@@ -15,7 +16,7 @@ import {
   saveCloudProgress,
   saveStudentSession
 } from "@/lib/progress";
-import type { AppAssignment, ChoiceQuestion, Lesson, Skill, StudentProgress, StudentSession, Word } from "@/lib/types";
+import type { AppAssignment, ChoiceQuestion, CourseDraft, Lesson, Skill, StudentProgress, StudentSession, Word } from "@/lib/types";
 
 type Screen = "home" | "map" | "story" | "vocab" | "listen" | "speak" | "read" | "write" | "review" | "progress";
 
@@ -46,7 +47,8 @@ export function StudentApp() {
   const [speed, setSpeed] = useState(0.85);
   const [assignments, setAssignments] = useState<AppAssignment[]>([]);
   const [cloudStatus, setCloudStatus] = useState("");
-  const lesson = useMemo(() => appLessons.find((item) => item.id === lessonId) || appLessons[0], [lessonId]);
+  const [lessons, setLessons] = useState(appLessons);
+  const lesson = useMemo(() => lessons.find((item) => item.id === lessonId) || lessons[0] || appLessons[0], [lessonId, lessons]);
 
   useEffect(() => {
     const savedStudent = loadStudentSession();
@@ -64,6 +66,12 @@ export function StudentApp() {
 
   useEffect(() => {
     if (!student || student.mode !== "supabase" || !supabase) return;
+    supabase
+      .from("course_drafts")
+      .select("*")
+      .eq("status", "published")
+      .then(({ data }) => setLessons(mergePublishedLessons(appLessons, (data || []) as CourseDraft[])));
+
     supabase
       .from("app_assignments")
       .select("*")
@@ -230,7 +238,7 @@ export function StudentApp() {
                 <div className="section-title"><h3>老師指定任務</h3><span className="pill blue">{assignments.length} 個任務</span></div>
                 <div className="grid cards">
                   {assignments.map((item) => {
-                    const assignedLesson = appLessons.find((lesson) => lesson.id === item.lesson_id);
+                    const assignedLesson = lessons.find((lesson) => lesson.id === item.lesson_id);
                     return (
                       <article className="card assignment-card" key={item.id}>
                         <span className="pill">{item.skill === "all" ? "全部任務" : skillLabels[item.skill]}</span>
@@ -284,9 +292,9 @@ export function StudentApp() {
           <section>
             <div className="section-title"><h3>故事關卡地圖</h3><span className="pill">完成一關解鎖下一關</span></div>
             <div className="grid cards">
-              {appLessons.map((item, index) => {
+              {lessons.map((item, index) => {
                 const completed = progress.completedLessons.includes(item.id);
-                const unlocked = index === 0 || progress.completedLessons.includes(appLessons[index - 1].id);
+                const unlocked = index === 0 || progress.completedLessons.includes(lessons[index - 1].id);
                 return (
                   <article className="card lesson-card" key={item.id}>
                     <div className="lesson-cover">{item.cover}</div>
