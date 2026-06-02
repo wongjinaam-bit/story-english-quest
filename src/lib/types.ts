@@ -54,6 +54,9 @@ export type Lesson = {
   read: ChoiceQuestion[];
   speak: SpeakingTask[];
   write: WritingTask[];
+  sortOrder?: number;
+  unlockMode?: "open" | "previous" | "specific";
+  prerequisiteLessonId?: string;
 };
 
 export type StudentProgress = {

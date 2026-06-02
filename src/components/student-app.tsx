@@ -322,15 +322,16 @@ export function StudentApp() {
             <div className="grid cards">
               {lessons.map((item, index) => {
                 const completed = progress.completedLessons.includes(item.id);
-                const unlocked = index === 0 || progress.completedLessons.includes(lessons[index - 1].id);
+                const unlockState = getLessonUnlockState(item, index, lessons, progress.completedLessons);
                 return (
                   <article className="card lesson-card" key={item.id}>
                     <div className="lesson-cover">{item.cover}</div>
-                    <span className={completed ? "pill" : "pill blue"}>{completed ? "已完成" : unlocked ? "可開始" : "未解鎖"}</span>
+                    <span className={completed ? "pill" : "pill blue"}>{completed ? "已完成" : unlockState.unlocked ? "可開始" : "未解鎖"}</span>
                     <h3>{item.title}</h3>
                     <p className="muted">{item.topic} · Level {item.level}</p>
-                    <button className={unlocked ? "btn primary full" : "btn secondary full"} disabled={!unlocked} onClick={() => { setLessonId(item.id); setScreen("story"); }}>
-                      {unlocked ? "進入故事" : "先完成前一關"}
+                    <p className="muted">{unlockState.reason}</p>
+                    <button className={unlockState.unlocked ? "btn primary full" : "btn secondary full"} disabled={!unlockState.unlocked} onClick={() => { setLessonId(item.id); setScreen("story"); }}>
+                      {unlockState.unlocked ? "進入故事" : unlockState.lockLabel}
                     </button>
                   </article>
                 );
@@ -350,6 +351,31 @@ export function StudentApp() {
       </main>
     </div>
   );
+}
+
+function getLessonUnlockState(item: Lesson, index: number, lessons: Lesson[], completedLessons: string[]) {
+  if (completedLessons.includes(item.id)) {
+    return { unlocked: true, reason: "你已完成這一課。", lockLabel: "已完成" };
+  }
+  if (item.unlockMode === "open" || index === 0) {
+    return { unlocked: true, reason: "老師設定為立即開放。", lockLabel: "可開始" };
+  }
+  if (item.unlockMode === "specific" && item.prerequisiteLessonId) {
+    const prerequisite = lessons.find((lesson) => lesson.id === item.prerequisiteLessonId);
+    const unlocked = completedLessons.includes(item.prerequisiteLessonId);
+    return {
+      unlocked,
+      reason: unlocked ? `已完成前置課程：${prerequisite?.title || "指定課程"}` : `需先完成：${prerequisite?.title || "指定課程"}`,
+      lockLabel: `先完成：${prerequisite?.title || "指定課程"}`
+    };
+  }
+  const previous = lessons[index - 1];
+  const unlocked = !previous || completedLessons.includes(previous.id);
+  return {
+    unlocked,
+    reason: unlocked ? "已完成上一課，可以開始。" : `需先完成上一課：${previous.title}`,
+    lockLabel: "先完成前一關"
+  };
 }
 
 function StudentLogin({ onEnter }: { onEnter: (student: StudentSession) => Promise<void> }) {

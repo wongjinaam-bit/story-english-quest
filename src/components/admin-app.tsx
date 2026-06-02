@@ -491,6 +491,10 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
   const [readText, setReadText] = useState("");
   const [speakText, setSpeakText] = useState("");
   const [writeText, setWriteText] = useState("");
+  const [positionMode, setPositionMode] = useState<"end" | "beginning" | "after">("end");
+  const [positionAfterLessonId, setPositionAfterLessonId] = useState(appLessons[0].id);
+  const [unlockMode, setUnlockMode] = useState<"open" | "previous" | "specific">("open");
+  const [prerequisiteLessonId, setPrerequisiteLessonId] = useState(appLessons[0].id);
   const [message, setMessage] = useState("");
 
   function loadLessonTemplate(lesson = appLessons.find((item) => item.id === sourceLessonId) || appLessons[0]) {
@@ -506,6 +510,10 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
     setReadText(lesson.read.map((item) => `${item.prompt} | ${item.answer} | ${item.options.join(", ")}`).join("\n"));
     setSpeakText(lesson.speak.map((item) => `${item.prompt} | ${item.target}`).join("\n"));
     setWriteText(lesson.write.map((item) => `${item.prompt} | ${item.starter} | ${item.answerHint}`).join("\n"));
+    setPositionMode("after");
+    setPositionAfterLessonId(lesson.id);
+    setUnlockMode(lesson.id === appLessons[0].id ? "open" : "previous");
+    setPrerequisiteLessonId(lesson.id);
     setMessage("已載入現有課程，可修改後儲存為草稿。");
     setView("editor");
   }
@@ -541,6 +549,10 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
     setReadText(content.readText || "");
     setSpeakText(content.speakText || "");
     setWriteText(content.writeText || "");
+    setPositionMode("end");
+    setPositionAfterLessonId(String(content.positionAfterLessonId || appLessons[0].id));
+    setUnlockMode((content.unlockMode as "open" | "previous" | "specific") || "open");
+    setPrerequisiteLessonId(String(content.prerequisiteLessonId || appLessons[0].id));
     setMessage("");
     setView("editor");
   }
@@ -558,6 +570,10 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
     setReadText("");
     setSpeakText("");
     setWriteText("");
+    setPositionMode("end");
+    setPositionAfterLessonId(appLessons[0].id);
+    setUnlockMode("open");
+    setPrerequisiteLessonId(appLessons[0].id);
   }
 
   function newBlankCourse() {
@@ -600,6 +616,10 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
       "替換單字造句 | I see my ____. | friend",
       "寫一句自己的句子 | I am ____. | happy"
     ].join("\n"));
+    setPositionMode("end");
+    setPositionAfterLessonId(appLessons[0].id);
+    setUnlockMode("open");
+    setPrerequisiteLessonId(appLessons[0].id);
     setMessage("已建立完整課程模板，請按區塊修改後儲存或發布。");
     setView("editor");
   }
@@ -615,6 +635,7 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
       return;
     }
     const id = editingId || title.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || `course-${Date.now()}`;
+    const sortOrder = calculateSortOrder(id);
     const payload = {
       id,
       title: title.trim(),
@@ -629,7 +650,12 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
         listenText,
         readText,
         speakText,
-        writeText
+        writeText,
+        sortOrder,
+        positionMode,
+        positionAfterLessonId,
+        unlockMode,
+        prerequisiteLessonId: unlockMode === "specific" ? prerequisiteLessonId : ""
       },
       updated_by: teacher.id,
       updated_at: new Date().toISOString()
@@ -678,6 +704,8 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
   const draftMap = new Map(drafts.map((draft) => [draft.id, draft]));
   const builtinRows = appLessons.map((lesson) => {
     const draft = draftMap.get(lesson.id);
+    const content = (draft?.content || {}) as any;
+    const fallbackOrder = (appLessons.findIndex((item) => item.id === lesson.id) + 1) * 1000;
     return {
       id: lesson.id,
       title: draft?.title || lesson.title,
@@ -687,6 +715,9 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
       words: draft ? countFilledLines((draft.content as any)?.wordsText) : lesson.words.length,
       status: draft ? (draft.status === "published" ? "已發布自訂版" : "草稿覆蓋中") : "內建已發布",
       source: "內建課程",
+      sortOrder: Number(content.sortOrder || fallbackOrder),
+      unlockMode: (content.unlockMode as "open" | "previous" | "specific") || (lesson.id === appLessons[0].id ? "open" : "previous"),
+      prerequisiteLessonId: String(content.prerequisiteLessonId || ""),
       draft,
       lesson,
       canDelete: false
@@ -695,6 +726,7 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
   const customRows = drafts
     .filter((draft) => !appLessons.some((lesson) => lesson.id === draft.id))
     .map((draft) => ({
+      ...(draft.content as any),
       id: draft.id,
       title: draft.title,
       topic: draft.topic,
@@ -703,11 +735,15 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
       words: countFilledLines((draft.content as any)?.wordsText),
       status: draft.status === "published" ? "已發布到學生端" : "草稿",
       source: "自訂課程",
+      sortOrder: Number((draft.content as any)?.sortOrder || 999000),
+      unlockMode: ((draft.content as any)?.unlockMode as "open" | "previous" | "specific") || "open",
+      prerequisiteLessonId: String((draft.content as any)?.prerequisiteLessonId || ""),
       draft,
       lesson: null,
       canDelete: true
     }));
-  const courseRows = [...builtinRows, ...customRows];
+  const courseRows = [...builtinRows, ...customRows].sort((a, b) => a.sortOrder - b.sortOrder);
+  const courseOptions = courseRows.map((row) => ({ id: row.id, title: row.title, order: row.sortOrder }));
 
   function countFilledLines(value?: string) {
     return (value || "").split("\n").filter((line) => line.trim()).length;
@@ -722,6 +758,28 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
       setSourceLessonId(row.lesson.id);
       loadLessonTemplate(row.lesson);
     }
+  }
+
+  function calculateSortOrder(currentId: string) {
+    const otherRows = courseRows.filter((row) => row.id !== currentId);
+    const currentRow = courseRows.find((row) => row.id === currentId);
+    if (positionMode === "beginning") {
+      return Math.min(0, ...otherRows.map((row) => row.sortOrder)) - 100;
+    }
+    if (positionMode === "after") {
+      if (positionAfterLessonId === currentId && currentRow) return currentRow.sortOrder;
+      const selected = otherRows.find((row) => row.id === positionAfterLessonId);
+      return (selected?.sortOrder || 0) + 50;
+    }
+    return Math.max(0, ...otherRows.map((row) => row.sortOrder)) + 100;
+  }
+
+  function unlockLabel(row: { unlockMode: "open" | "previous" | "specific"; prerequisiteLessonId: string }) {
+    if (row.unlockMode === "open") return "立即開放";
+    if (row.unlockMode === "specific") {
+      return `完成指定課程：${courseRows.find((item) => item.id === row.prerequisiteLessonId)?.title || "未指定"}`;
+    }
+    return "完成上一課後開放";
   }
 
   if (view === "editor") {
@@ -766,7 +824,45 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
 
             <section className="editor-section">
               <div>
-                <h4>2. 迷你故事</h4>
+                <h4>2. 發布與解鎖規則</h4>
+                <p className="muted">決定課程在學生地圖的位置，以及學生什麼時候可以開始。</p>
+              </div>
+              <div className="form-grid">
+                <div className="field">
+                  <label>課程顯示位置</label>
+                  <select value={positionMode} onChange={(event) => setPositionMode(event.target.value as "end" | "beginning" | "after")}>
+                    <option value="end">放到課程列表最後</option>
+                    <option value="beginning">放到課程列表最前</option>
+                    <option value="after">放在指定課程後面</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label>指定放在哪一課後面</label>
+                  <select value={positionAfterLessonId} onChange={(event) => setPositionAfterLessonId(event.target.value)} disabled={positionMode !== "after"}>
+                    {courseOptions.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
+                  </select>
+                </div>
+                <div className="field">
+                  <label>學生解鎖方式</label>
+                  <select value={unlockMode} onChange={(event) => setUnlockMode(event.target.value as "open" | "previous" | "specific")}>
+                    <option value="open">立即開放，不需要先完成其他課程</option>
+                    <option value="previous">完成上一課後開放</option>
+                    <option value="specific">完成指定課程後開放</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label>指定前置課程</label>
+                  <select value={prerequisiteLessonId} onChange={(event) => setPrerequisiteLessonId(event.target.value)} disabled={unlockMode !== "specific"}>
+                    {courseOptions.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
+                  </select>
+                </div>
+                <p className="muted span-2">建議：主線課用「完成上一課後開放」；節日、補充或老師派發任務用「立即開放」；複習課用「完成指定課程後開放」。</p>
+              </div>
+            </section>
+
+            <section className="editor-section">
+              <div>
+                <h4>3. 迷你故事</h4>
                 <p className="muted">建議 4 至 6 句，每句包含英文、中文和圖示。</p>
               </div>
               <div className="field">
@@ -778,7 +874,7 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
 
             <section className="editor-section">
               <div>
-                <h4>3. 單字卡</h4>
+                <h4>4. 單字卡</h4>
                 <p className="muted">建議 6 至 10 個單字，包含詞性、例句和中文翻譯。</p>
               </div>
               <div className="field">
@@ -790,7 +886,7 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
 
             <section className="editor-section">
               <div>
-                <h4>4. 聽力任務</h4>
+                <h4>5. 聽力任務</h4>
                 <p className="muted">可以放聽單字、聽句子、聽故事後選答案。</p>
               </div>
               <div className="field">
@@ -802,7 +898,7 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
 
             <section className="editor-section">
               <div>
-                <h4>5. 閱讀任務</h4>
+                <h4>6. 閱讀任務</h4>
                 <p className="muted">讓學生根據故事理解內容。</p>
               </div>
               <div className="field">
@@ -813,7 +909,7 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
 
             <section className="editor-section">
               <div>
-                <h4>6. 口說任務</h4>
+                <h4>7. 口說任務</h4>
                 <p className="muted">安排跟讀、替換句型、看圖說話。</p>
               </div>
               <div className="field">
@@ -824,7 +920,7 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
 
             <section className="editor-section">
               <div>
-                <h4>7. 寫作任務</h4>
+                <h4>8. 寫作任務</h4>
                 <p className="muted">由填空到造句，逐步降低難度。</p>
               </div>
               <div className="field">
@@ -859,14 +955,16 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
           </div>
         </div>
         <table className="table">
-          <thead><tr><th>課程</th><th>主題</th><th>Level</th><th>單字</th><th>狀態</th><th>操作</th></tr></thead>
+          <thead><tr><th>排序</th><th>課程</th><th>主題</th><th>Level</th><th>單字</th><th>解鎖方式</th><th>狀態</th><th>操作</th></tr></thead>
           <tbody>
-            {courseRows.map((row) => (
+            {courseRows.map((row, index) => (
               <tr key={row.id}>
+                <td>{index + 1}</td>
                 <td><strong>{row.cover} {row.title}</strong><small>{row.source}</small></td>
                 <td>{row.topic}</td>
                 <td>{row.level}</td>
                 <td>{row.words}</td>
+                <td>{unlockLabel(row)}</td>
                 <td><span className="pill blue">{row.status}</span></td>
                 <td>
                   <div className="course-table-actions">

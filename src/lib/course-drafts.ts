@@ -46,6 +46,11 @@ function parseChoiceQuestions(text = "", skill: Skill): ChoiceQuestion[] {
   }).filter(Boolean) as ChoiceQuestion[];
 }
 
+function asNumber(value: unknown, fallback: number) {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : fallback;
+}
+
 export function courseDraftToLesson(draft: CourseDraft): Lesson {
   const content = draft.content || {};
   const sentences = parseSentences(String(content.sentencesText || ""));
@@ -73,14 +78,21 @@ export function courseDraftToLesson(draft: CourseDraft): Lesson {
     listen,
     read,
     speak,
-    write
+    write,
+    sortOrder: asNumber(content.sortOrder, 999000),
+    unlockMode: String(content.unlockMode || "previous") as Lesson["unlockMode"],
+    prerequisiteLessonId: String(content.prerequisiteLessonId || "")
   };
 }
 
 export function mergePublishedLessons(baseLessons: Lesson[], drafts: CourseDraft[]) {
-  const map = new Map(baseLessons.map((lesson) => [lesson.id, lesson]));
+  const map = new Map<string, Lesson>(baseLessons.map((lesson, index) => [lesson.id, {
+    ...lesson,
+    sortOrder: lesson.sortOrder ?? (index + 1) * 1000,
+    unlockMode: lesson.unlockMode ?? (index === 0 ? "open" : "previous")
+  }]));
   drafts.filter((draft) => draft.status === "published").forEach((draft) => {
     map.set(draft.id, courseDraftToLesson(draft));
   });
-  return Array.from(map.values());
+  return Array.from(map.values()).sort((a, b) => (a.sortOrder || 999000) - (b.sortOrder || 999000));
 }
