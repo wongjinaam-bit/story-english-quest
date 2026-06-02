@@ -3,13 +3,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { Headphones, LogOut, Mic, QrCode, Sparkles, Star, UserRound } from "lucide-react";
 import { appLessons } from "@/data/lessons";
+import { isSupabaseReady, signInStudent, signOut, signUpStudent } from "@/lib/auth";
 import {
   clearStudentSession,
-  loadProgress,
+  loadCloudProgress,
+  loadLocalProgress,
   loadStudentSession,
   recordAnswer,
   recordSkill,
-  saveProgress,
+  saveCloudProgress,
   saveStudentSession
 } from "@/lib/progress";
 import type { ChoiceQuestion, Lesson, Skill, StudentProgress, StudentSession } from "@/lib/types";
@@ -47,31 +49,23 @@ export function StudentApp() {
     const savedStudent = loadStudentSession();
     if (savedStudent) {
       setStudent(savedStudent);
-      setProgress(loadProgress(savedStudent.id));
+      loadCloudProgress(savedStudent.id).then(setProgress);
     }
   }, []);
 
   useEffect(() => {
-    if (student && progress) saveProgress(progress, student.id);
+    if (student && progress) saveCloudProgress(student.id, progress);
   }, [progress, student]);
 
-  function loginStudent(name: string, code: string, avatar: string) {
-    const cleanName = name.trim();
-    const cleanCode = code.trim().replace(/\s+/g, "").toUpperCase();
-    const nextStudent: StudentSession = {
-      id: cleanCode.toLowerCase(),
-      name: cleanName,
-      code: cleanCode,
-      avatar,
-      loginAt: new Date().toISOString()
-    };
+  async function enterStudent(nextStudent: StudentSession) {
     saveStudentSession(nextStudent);
     setStudent(nextStudent);
-    setProgress(loadProgress(nextStudent.id));
+    setProgress(await loadCloudProgress(nextStudent.id));
     setScreen("home");
   }
 
-  function logoutStudent() {
+  async function logoutStudent() {
+    await signOut();
     clearStudentSession();
     setStudent(null);
     setProgress(null);
@@ -79,7 +73,7 @@ export function StudentApp() {
   }
 
   if (!student || !progress) {
-    return <StudentLogin onLogin={loginStudent} />;
+    return <StudentLogin onEnter={enterStudent} />;
   }
 
   const activeStudent = student;
@@ -87,7 +81,7 @@ export function StudentApp() {
 
   function mutateProgress(mutator: (draft: StudentProgress) => void) {
     setProgress((current) => {
-      const next = structuredClone(current || loadProgress(activeStudent.id));
+      const next = structuredClone(current || loadLocalProgress(activeStudent.id));
       mutator(next);
       return next;
     });
@@ -127,7 +121,7 @@ export function StudentApp() {
           <span>{student.avatar}</span>
           <div>
             <strong>{student.name}</strong>
-            <small>學生代碼：{student.code}</small>
+            <small>{student.mode === "supabase" ? "雲端帳號" : "本機模式"}：{student.code}</small>
           </div>
         </div>
 
@@ -139,7 +133,7 @@ export function StudentApp() {
           ))}
           <a className="btn secondary full" href="/qr"><QrCode size={18} /> QR Code</a>
           <a className="btn secondary full" href="/admin">教師後台</a>
-          <button className="btn secondary full" onClick={logoutStudent}><LogOut size={18} /> 切換學生</button>
+          <button className="btn secondary full" onClick={logoutStudent}><LogOut size={18} /> 登出 / 切換學生</button>
         </nav>
 
         <div className="side-card">
@@ -232,66 +226,118 @@ export function StudentApp() {
   );
 }
 
-function StudentLogin({ onLogin }: { onLogin: (name: string, code: string, avatar: string) => void }) {
+function StudentLogin({ onEnter }: { onEnter: (student: StudentSession) => Promise<void> }) {
+  const [mode, setMode] = useState<"login" | "register">("login");
   const [name, setName] = useState("");
-  const [code, setCode] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [avatar, setAvatar] = useState(avatars[0]);
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const supabaseReady = isSupabaseReady();
 
-  function submitLogin(event: React.FormEvent<HTMLFormElement>) {
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!name.trim()) {
-      setError("請輸入學生姓名。");
-      return;
-    }
-    if (code.trim().replace(/\s+/g, "").length < 3) {
-      setError("學生代碼至少需要 3 個字，例如 S001。");
-      return;
-    }
     setError("");
-    onLogin(name, code, avatar);
+
+    if (!supabaseReady) {
+      setError("還沒連接 Supabase。請先在 Vercel 設定 NEXT_PUBLIC_SUPABASE_URL 和 NEXT_PUBLIC_SUPABASE_ANON_KEY。");
+      return;
+    }
+    if (username.trim().length < 3) {
+      setError("學生帳號至少 3 個字，例如 s001。");
+      return;
+    }
+    if (password.length < 6) {
+      setError("密碼至少 6 個字。");
+      return;
+    }
+    if (mode === "register" && !name.trim()) {
+      setError("註冊時需要輸入學生姓名。");
+      return;
+    }
+
+    setBusy(true);
+    const result = mode === "register"
+      ? await signUpStudent({ username, password, name, avatar })
+      : await signInStudent(username, password);
+    setBusy(false);
+
+    if (!result.ok) {
+      setError(result.message);
+      return;
+    }
+    await onEnter(result.session);
   }
 
-  function demoLogin(studentName: string, studentCode: string, studentAvatar: string) {
-    setError("");
-    onLogin(studentName, studentCode, studentAvatar);
+  function localDemoLogin(studentName: string, code: string, studentAvatar: string) {
+    onEnter({
+      id: code.toLowerCase(),
+      name: studentName,
+      code,
+      avatar: studentAvatar,
+      loginAt: new Date().toISOString(),
+      mode: "local"
+    });
   }
 
   return (
     <main className="login-page student-login-page">
       <section className="login-card student-login-card">
-        <p className="eyebrow">Student Login</p>
-        <h2>學生登入</h2>
-        <p className="muted">輸入姓名和學生代碼，就可以保存自己的學習進度。小朋友不用 email，也不用記複雜密碼。</p>
+        <p className="eyebrow">Student Account</p>
+        <h2>{mode === "login" ? "學生登入" : "學生註冊"}</h2>
+        <p className="muted">
+          學生用帳號和密碼登入後，進度會根據帳號保存。換裝置登入同一個帳號，也能讀取雲端進度。
+        </p>
 
-        <form className="form" onSubmit={submitLogin}>
-          <div className="field">
-            <label>學生姓名</label>
-            <input value={name} onChange={(event) => setName(event.target.value)} placeholder="例如：Amy" />
+        {!supabaseReady && (
+          <div className="notice-box">
+            <strong>Supabase 尚未連接</strong>
+            <p>目前可以先用示範登入。要啟用正式帳號，請先建立 Supabase 專案並設定 Vercel 環境變數。</p>
           </div>
-          <div className="field">
-            <label>學生代碼</label>
-            <input value={code} onChange={(event) => setCode(event.target.value)} placeholder="例如：S001" />
-          </div>
-          <div className="field">
-            <label>選擇學習徽章</label>
-            <div className="avatar-grid">
-              {avatars.map((item) => (
-                <button type="button" className={avatar === item ? "avatar-choice active" : "avatar-choice"} key={item} onClick={() => setAvatar(item)}>
-                  {item}
-                </button>
-              ))}
+        )}
+
+        <form className="form" onSubmit={submit}>
+          {mode === "register" && (
+            <div className="field">
+              <label>學生姓名</label>
+              <input value={name} onChange={(event) => setName(event.target.value)} placeholder="例如：Amy" />
             </div>
+          )}
+          <div className="field">
+            <label>學生帳號</label>
+            <input value={username} onChange={(event) => setUsername(event.target.value)} placeholder="例如：s001" />
           </div>
+          <div className="field">
+            <label>密碼</label>
+            <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="至少 6 個字" />
+          </div>
+          {mode === "register" && (
+            <div className="field">
+              <label>選擇學習徽章</label>
+              <div className="avatar-grid">
+                {avatars.map((item) => (
+                  <button type="button" className={avatar === item ? "avatar-choice active" : "avatar-choice"} key={item} onClick={() => setAvatar(item)}>
+                    {item}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {error && <p className="form-error">{error}</p>}
-          <button className="btn primary full" type="submit"><UserRound size={18} /> 進入學習</button>
+          <button className="btn primary full" type="submit" disabled={busy}>
+            <UserRound size={18} /> {busy ? "處理中..." : mode === "login" ? "登入學習" : "建立學生帳號"}
+          </button>
         </form>
 
         <div className="demo-login">
-          <p className="muted">快速示範登入</p>
+          <button className="btn secondary full" onClick={() => setMode(mode === "login" ? "register" : "login")}>
+            {mode === "login" ? "還沒有帳號？註冊學生帳號" : "已有帳號？回到登入"}
+          </button>
+          <p className="muted">示範登入仍可用，但只保存於本機瀏覽器。</p>
           <div className="btns">
-            <button className="btn secondary" onClick={() => demoLogin("Amy", "S001", "⭐")}>Amy S001</button>
-            <button className="btn secondary" onClick={() => demoLogin("Ben", "S002", "🚀")}>Ben S002</button>
+            <button className="btn secondary" onClick={() => localDemoLogin("Amy", "S001", "⭐")}>Amy S001</button>
+            <button className="btn secondary" onClick={() => localDemoLogin("Ben", "S002", "🚀")}>Ben S002</button>
           </div>
         </div>
       </section>
@@ -529,7 +575,7 @@ function Progress({ progress, student }: { progress: StudentProgress; student: S
     <section>
       <div className="section-title">
         <h3>{student.avatar} {student.name} 的學習進度</h3>
-        <span className="pill blue">代碼 {student.code}</span>
+        <span className="pill blue">帳號 {student.code}</span>
       </div>
       <div className="metric-grid">
         <div className="metric"><strong>{progress.completedLessons.length}</strong><small>完成故事</small></div>

@@ -1,5 +1,7 @@
 export type Skill = "listen" | "speak" | "read" | "write";
 
+export type UserRole = "student" | "teacher" | "admin";
+
 export type Word = {
   word: string;
   meaning: string;
@@ -66,8 +68,20 @@ export type StudentProgress = {
 
 export type StudentSession = {
   id: string;
+  authId?: string;
   name: string;
   code: string;
   avatar: string;
   loginAt: string;
+  mode: "local" | "supabase";
+};
+
+export type Profile = {
+  id: string;
+  name: string;
+  username: string | null;
+  role: UserRole;
+  avatar: string | null;
+  class_id: string | null;
+  last_seen_at: string | null;
 };

@@ -1,3 +1,4 @@
+import { supabase } from "@/lib/supabase";
 import type { Skill, StudentProgress, StudentSession } from "@/lib/types";
 
 const currentStudentKey = "seq-current-student";
@@ -16,6 +17,14 @@ function emptyProgress(): StudentProgress {
 
 function progressKey(studentId: string) {
   return `seq-progress-${studentId}`;
+}
+
+export function usernameToEmail(username: string) {
+  return `${username.trim().replace(/\s+/g, "").toLowerCase()}@story-english-quest.local`;
+}
+
+export function cleanUsername(username: string) {
+  return username.trim().replace(/\s+/g, "").toLowerCase();
 }
 
 export function loadStudentSession(): StudentSession | null {
@@ -39,7 +48,7 @@ export function clearStudentSession() {
   }
 }
 
-export function loadProgress(studentId = "guest"): StudentProgress {
+export function loadLocalProgress(studentId = "guest"): StudentProgress {
   if (typeof window === "undefined") return emptyProgress();
   try {
     return { ...emptyProgress(), ...JSON.parse(localStorage.getItem(progressKey(studentId)) || "{}") };
@@ -48,10 +57,41 @@ export function loadProgress(studentId = "guest"): StudentProgress {
   }
 }
 
-export function saveProgress(progress: StudentProgress, studentId = "guest") {
+export function saveLocalProgress(progress: StudentProgress, studentId = "guest") {
   if (typeof window !== "undefined") {
     localStorage.setItem(progressKey(studentId), JSON.stringify(progress));
   }
+}
+
+export async function loadCloudProgress(studentId: string): Promise<StudentProgress> {
+  if (!supabase) return loadLocalProgress(studentId);
+  const { data, error } = await supabase
+    .from("student_app_state")
+    .select("progress")
+    .eq("student_id", studentId)
+    .maybeSingle();
+
+  if (error) {
+    console.warn("Could not load cloud progress", error.message);
+    return loadLocalProgress(studentId);
+  }
+
+  return { ...emptyProgress(), ...(data?.progress as Partial<StudentProgress> | null) };
+}
+
+export async function saveCloudProgress(studentId: string, progress: StudentProgress) {
+  saveLocalProgress(progress, studentId);
+  if (!supabase) return;
+
+  const { error } = await supabase
+    .from("student_app_state")
+    .upsert({
+      student_id: studentId,
+      progress,
+      updated_at: new Date().toISOString()
+    });
+
+  if (error) console.warn("Could not save cloud progress", error.message);
 }
 
 export function recordSkill(progress: StudentProgress, lessonId: string, skill: Skill) {

@@ -4,10 +4,17 @@ create type skill_type as enum ('listen', 'speak', 'read', 'write');
 create table public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   name text not null,
+  username text,
   role user_role not null default 'student',
+  avatar text,
   class_id uuid,
+  last_seen_at timestamptz,
   created_at timestamptz not null default now()
 );
+
+create unique index profiles_username_unique
+  on public.profiles (lower(username))
+  where username is not null;
 
 create table public.classes (
   id uuid primary key default gen_random_uuid(),
@@ -143,6 +150,12 @@ create table public.assignments (
   created_at timestamptz not null default now()
 );
 
+create table public.student_app_state (
+  student_id uuid primary key references public.profiles(id) on delete cascade,
+  progress jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
 alter table public.profiles enable row level security;
 alter table public.classes enable row level security;
 alter table public.lessons enable row level security;
@@ -156,6 +169,7 @@ alter table public.review_items enable row level security;
 alter table public.badges enable row level security;
 alter table public.student_badges enable row level security;
 alter table public.assignments enable row level security;
+alter table public.student_app_state enable row level security;
 
 create policy "Published lessons are readable" on public.lessons for select using (is_published = true);
 create policy "Published story sentences are readable" on public.story_sentences for select using (
@@ -172,7 +186,25 @@ create policy "Published speaking tasks are readable" on public.speaking_tasks f
 );
 
 create policy "Users can read own profile" on public.profiles for select using (auth.uid() = id);
+create policy "Users can insert own profile" on public.profiles for insert with check (auth.uid() = id);
+create policy "Users can update own profile" on public.profiles for update using (auth.uid() = id) with check (auth.uid() = id);
+create policy "Teachers can read students" on public.profiles for select using (
+  role = 'student'
+  and exists (
+    select 1 from public.profiles teacher
+    where teacher.id = auth.uid()
+    and teacher.role in ('teacher', 'admin')
+  )
+);
 create policy "Students can manage own progress" on public.student_progress for all using (auth.uid() = student_id);
 create policy "Students can manage own answers" on public.student_answers for all using (auth.uid() = student_id);
 create policy "Students can manage own reviews" on public.review_items for all using (auth.uid() = student_id);
 create policy "Students can read own badges" on public.student_badges for select using (auth.uid() = student_id);
+create policy "Students can manage own app state" on public.student_app_state for all using (auth.uid() = student_id) with check (auth.uid() = student_id);
+create policy "Teachers can read student app state" on public.student_app_state for select using (
+  exists (
+    select 1 from public.profiles staff
+    where staff.id = auth.uid()
+    and staff.role in ('teacher', 'admin')
+  )
+);

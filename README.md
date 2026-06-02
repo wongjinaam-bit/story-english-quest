@@ -34,14 +34,16 @@ MVP 目前使用 demo 驗證與瀏覽器 localStorage，方便立即試用。正
 
 ## 學生登入
 
-學生端使用簡單登入，適合小學生：
+學生端支援正式帳號登入：
 
 ```text
-學生姓名：Amy
-學生代碼：S001
+學生帳號：s001
+密碼：老師或學生設定
 ```
 
-同一台裝置上，不同學生代碼會保存不同學習進度。正式班級使用時，可由老師發給每位學生一個代碼，例如 `S001`、`S002`、`A101`。
+正式帳號使用 Supabase Auth。小學生不用看到 email，系統會把 `s001` 轉成隱藏 email 給 Supabase 使用。進度會保存到 Supabase 的 `student_app_state` 表。
+
+如果 Supabase 尚未設定，學生端仍保留示範登入，但示範登入只保存於本機瀏覽器。
 
 ## 本機啟動
 
@@ -81,16 +83,26 @@ http://localhost:3000/qr
 1. 到 Supabase 建立新專案。
 2. 打開 SQL Editor。
 3. 貼上 `supabase/schema.sql` 並執行。
-4. 到 Project Settings 取得：
+4. 如果你之前已經執行過舊 schema，請再執行 `supabase/phase-1-auth.sql`。
+5. 到 Authentication > Providers > Email，建議先關閉 Confirm email，方便學生註冊後直接登入。
+6. 到 Project Settings 取得：
    - Project URL
    - anon public key
-5. 複製 `.env.example` 成 `.env.local`。
-6. 填入：
+7. 複製 `.env.example` 成 `.env.local`。
+8. 填入：
 
 ```text
 NEXT_PUBLIC_SUPABASE_URL=你的 Supabase URL
 NEXT_PUBLIC_SUPABASE_ANON_KEY=你的 Supabase anon key
 NEXT_PUBLIC_APP_URL=http://localhost:3000
+```
+
+正式部署到 Vercel 時，也要在 Vercel Project Settings > Environment Variables 加入同樣的：
+
+```text
+NEXT_PUBLIC_SUPABASE_URL
+NEXT_PUBLIC_SUPABASE_ANON_KEY
+NEXT_PUBLIC_APP_URL
 ```
 
 ## 部署到 Vercel
