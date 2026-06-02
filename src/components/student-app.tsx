@@ -14,7 +14,7 @@ import {
   saveCloudProgress,
   saveStudentSession
 } from "@/lib/progress";
-import type { ChoiceQuestion, Lesson, Skill, StudentProgress, StudentSession } from "@/lib/types";
+import type { ChoiceQuestion, Lesson, Skill, StudentProgress, StudentSession, Word } from "@/lib/types";
 
 type Screen = "home" | "map" | "story" | "vocab" | "listen" | "speak" | "read" | "write" | "review" | "progress";
 
@@ -108,6 +108,10 @@ export function StudentApp() {
 
   function markVocabulary(word: string, known: boolean) {
     mutateProgress((draft) => recordAnswer(draft, lesson.id, "read", `單字：${word}`, known));
+  }
+
+  function answerReview(label: string, skill: Skill, correct: boolean) {
+    mutateProgress((draft) => recordAnswer(draft, lesson.id, skill, label, correct));
   }
 
   return (
@@ -226,7 +230,7 @@ export function StudentApp() {
         {screen === "speak" && <SpeakTask lesson={lesson} speak={speak} onDone={() => { completeSkill("speak"); setScreen("read"); }} />}
         {screen === "read" && <QuizTask lesson={lesson} skill="read" questions={lesson.read} speak={speak} onAnswer={answerQuestion} onDone={() => { completeSkill("read"); setScreen("write"); }} />}
         {screen === "write" && <WriteTask lesson={lesson} onDone={() => { completeSkill("write"); setScreen("progress"); }} />}
-        {screen === "review" && <Review progress={progress} />}
+        {screen === "review" && <Review progress={progress} speak={speak} onAnswer={answerReview} />}
         {screen === "progress" && <Progress progress={progress} student={student} />}
       </main>
     </div>
@@ -570,19 +574,100 @@ function WriteTask({ lesson, onDone }: { lesson: Lesson; onDone: () => void }) {
   );
 }
 
-function Review({ progress }: { progress: StudentProgress }) {
+function findReviewContext(label: string): { word?: Word; question?: ChoiceQuestion; lesson?: Lesson } {
+  const wordLabel = label.replace(/^單字：/, "");
+  for (const lesson of appLessons) {
+    const word = lesson.words.find((item) => item.word === wordLabel);
+    if (word) return { word, lesson };
+
+    const question = [...lesson.listen, ...lesson.read].find((item) => item.prompt === label);
+    if (question) return { question, lesson };
+  }
+  return {};
+}
+
+function Review({ progress, speak, onAnswer }: {
+  progress: StudentProgress;
+  speak: (text: string) => void;
+  onAnswer: (label: string, skill: Skill, correct: boolean) => void;
+}) {
   const items = Object.values(progress.mistakes);
+  const [picked, setPicked] = useState<Record<string, string>>({});
+  const [feedback, setFeedback] = useState<Record<string, string>>({});
+
+  function choose(item: { label: string; skill: Skill }, question: ChoiceQuestion, answer: string) {
+    const correct = answer === question.answer;
+    setPicked((current) => ({ ...current, [item.label]: answer }));
+    setFeedback((current) => ({
+      ...current,
+      [item.label]: correct ? "答對了！這題會慢慢從再挑戰中移除。" : `再練一次，正確答案是 ${question.answer}。`
+    }));
+    onAnswer(item.label, item.skill, correct);
+  }
+
   return (
     <section>
       <div className="section-title"><h3>再挑戰</h3><span className="pill blue">{items.length} 個項目</span></div>
       <div className="grid cards">
-        {items.length ? items.map((item) => (
-          <article className="card" key={item.label}>
-            <span className="pill">{skillLabels[item.skill]}</span>
-            <h3>{item.label}</h3>
-            <p className="muted">錯誤次數：{item.count}<br />下次複習：{item.nextReview}</p>
-          </article>
-        )) : <div className="panel"><h3>目前沒有錯題</h3><p className="muted">做得很好，答錯的題目會出現在這裡。</p></div>}
+        {items.length ? items.map((item) => {
+          const context = findReviewContext(item.label);
+          const selected = picked[item.label];
+          return (
+            <article className="card review-card" key={item.label}>
+              <div className="review-card-main">
+                <div className="review-head">
+                  <span className="pill">{skillLabels[item.skill]}</span>
+                  {context.lesson && <span className="pill blue">{context.lesson.title}</span>}
+                </div>
+
+                {context.word ? (
+                  <>
+                    <div className="emoji">{context.word.image}</div>
+                    <h3>{context.word.word}</h3>
+                    <p>{context.word.meaning} · {context.word.part}</p>
+                    <p className="muted">{context.word.example}<br />{context.word.translation}</p>
+                  </>
+                ) : context.question ? (
+                  <>
+                    <p className="eyebrow">重新練習</p>
+                    <h3>{context.question.prompt}</h3>
+                    {context.question.audio && (
+                      <button className="btn secondary" onClick={() => speak(context.question?.audio || context.question?.prompt || item.label)}>
+                        <Headphones size={18} /> 重聽
+                      </button>
+                    )}
+                    <div className="options review-options">
+                      {context.question.options.map((option) => (
+                        <button
+                          key={option}
+                          className={`option ${selected && option === context.question?.answer ? "correct" : ""} ${selected === option && option !== context.question?.answer ? "wrong" : ""}`}
+                          onClick={() => choose(item, context.question as ChoiceQuestion, option)}
+                        >
+                          {option}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="eyebrow">複習項目</p>
+                    <h3>{item.label}</h3>
+                    <p className="muted">這個項目已記錄，之後可接更完整的題型。</p>
+                  </>
+                )}
+
+                <p className="muted">錯誤次數：{item.count}<br />下次複習：{item.nextReview}</p>
+                {feedback[item.label] && <p className="success-text">{feedback[item.label]}</p>}
+              </div>
+
+              <div className="btns review-actions">
+                {context.word && <button className="btn secondary" onClick={() => speak(context.word?.word || item.label)}>發音</button>}
+                <button className="btn ghost" onClick={() => onAnswer(item.label, item.skill, true)}>我會了</button>
+                <button className="btn ghost" onClick={() => onAnswer(item.label, item.skill, false)}>再練一次</button>
+              </div>
+            </article>
+          );
+        }) : <div className="panel"><h3>目前沒有錯題</h3><p className="muted">做得很好，答錯的題目會出現在這裡。</p></div>}
       </div>
     </section>
   );
