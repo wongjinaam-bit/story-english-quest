@@ -555,6 +555,22 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
     setWriteText("");
   }
 
+  function newBlankCourse() {
+    setEditingId("");
+    setTitle("");
+    setTopic("");
+    setLevel(1);
+    setCover("📘");
+    setPattern("I see a ____.");
+    setSentencesText("I see a _____. | 我看到一個_____。 | 👀");
+    setWordsText("word | 中文意思 | noun | 📘 | I see a word. | 我看到一個單字。 | Level 1");
+    setListenText("聽單字，選出意思：word | 中文意思 | 中文意思, 其他選項, 其他選項 | word");
+    setReadText("What do you see? | word | word, book, bag");
+    setSpeakText("跟讀單字 | word\n跟讀句子 | I see a word.");
+    setWriteText("完成句子 | I see a ____. | word\n寫一句自己的句子 | I like ____. | your idea");
+    setMessage("已建立空白課程模板，請填寫後按「新增草稿」。");
+  }
+
   async function saveDraft() {
     setMessage("");
     if (!supabaseReady || !supabase || !teacher) {
@@ -614,6 +630,9 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
       <article className="panel">
         <h3>新增 / 編輯完整課程草稿</h3>
         <p className="muted">可選現有課程載入模板，修改故事、單字、聽說讀寫。草稿不會立即改動學生端，下一階段再加入發布。</p>
+        <div className="btns">
+          <button className="btn primary" type="button" onClick={newBlankCourse}>新增空白課程單元</button>
+        </div>
         <div className="field">
           <label>選擇現有課程作為模板</label>
           <div className="inline-controls">
