@@ -79,9 +79,14 @@ export async function loadCloudProgress(studentId: string): Promise<StudentProgr
   return { ...emptyProgress(), ...(data?.progress as Partial<StudentProgress> | null) };
 }
 
-export async function saveCloudProgress(studentId: string, progress: StudentProgress) {
+export async function saveCloudProgress(studentId: string, progress: StudentProgress): Promise<{ ok: boolean; message: string }> {
   saveLocalProgress(progress, studentId);
-  if (!supabase) return;
+  if (!supabase) return { ok: false, message: "Supabase 尚未連接，進度只保存在本機。" };
+
+  const { data: authData } = await supabase.auth.getUser();
+  if (authData.user?.id !== studentId) {
+    return { ok: false, message: "目前瀏覽器不是這個學生的雲端登入狀態，進度只保存在本機。請登出後重新登入學生帳號。" };
+  }
 
   const { error } = await supabase
     .from("student_app_state")
@@ -91,7 +96,12 @@ export async function saveCloudProgress(studentId: string, progress: StudentProg
       updated_at: new Date().toISOString()
     });
 
-  if (error) console.warn("Could not save cloud progress", error.message);
+  if (error) {
+    console.warn("Could not save cloud progress", error.message);
+    return { ok: false, message: error.message };
+  }
+
+  return { ok: true, message: "雲端進度已保存。" };
 }
 
 export function recordSkill(progress: StudentProgress, lessonId: string, skill: Skill) {

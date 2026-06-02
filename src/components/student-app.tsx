@@ -45,6 +45,7 @@ export function StudentApp() {
   const [showZh, setShowZh] = useState(true);
   const [speed, setSpeed] = useState(0.85);
   const [assignments, setAssignments] = useState<AppAssignment[]>([]);
+  const [cloudStatus, setCloudStatus] = useState("");
   const lesson = useMemo(() => appLessons.find((item) => item.id === lessonId) || appLessons[0], [lessonId]);
 
   useEffect(() => {
@@ -56,7 +57,9 @@ export function StudentApp() {
   }, []);
 
   useEffect(() => {
-    if (student && progress) saveCloudProgress(student.id, progress);
+    if (student && progress) {
+      saveCloudProgress(student.id, progress).then((result) => setCloudStatus(result.message));
+    }
   }, [progress, student]);
 
   useEffect(() => {
@@ -180,6 +183,12 @@ export function StudentApp() {
           <div className="notice-box local-warning">
             <strong>目前是本機模式</strong>
             <p>這個模式的星星和進度只存在這台裝置，教師後台看不到。要讓老師看到，請登出後用「學生註冊 / 學生登入」的雲端帳號進入。</p>
+          </div>
+        )}
+        {student.mode === "supabase" && cloudStatus && !cloudStatus.includes("已保存") && (
+          <div className="notice-box local-warning">
+            <strong>雲端保存提醒</strong>
+            <p>{cloudStatus}</p>
           </div>
         )}
 

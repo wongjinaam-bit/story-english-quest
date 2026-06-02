@@ -344,7 +344,7 @@ function Students({
 }
 
 function Assignments({ students, teacher, supabaseReady }: { students: StudentRow[]; teacher: Profile | null; supabaseReady: boolean }) {
-  const [studentId, setStudentId] = useState("");
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
   const [lessonId, setLessonId] = useState(appLessons[0].id);
   const [skill, setSkill] = useState<Skill | "all">("all");
   const [dueDate, setDueDate] = useState("");
@@ -353,8 +353,8 @@ function Assignments({ students, teacher, supabaseReady }: { students: StudentRo
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    if (!studentId && students[0]) setStudentId(students[0].profile.id);
-  }, [studentId, students]);
+    if (!selectedStudentIds.length && students[0]) setSelectedStudentIds([students[0].profile.id]);
+  }, [selectedStudentIds.length, students]);
 
   async function loadAssignments() {
     if (!supabaseReady || !supabase) return;
@@ -377,32 +377,38 @@ function Assignments({ students, teacher, supabaseReady }: { students: StudentRo
       setMessage("請先使用正式教師帳號登入。");
       return;
     }
-    if (!studentId) {
-      setMessage("請先選擇學生。");
+    if (!selectedStudentIds.length) {
+      setMessage("請先選擇至少一位學生。");
       return;
     }
 
-    const { error } = await supabase.from("app_assignments").insert({
+    const rows = selectedStudentIds.map((studentId) => ({
       teacher_id: teacher.id,
       student_id: studentId,
       lesson_id: lessonId,
       skill,
       due_date: dueDate || null,
       note: note.trim() || null
-    });
+    }));
+    const { error } = await supabase.from("app_assignments").insert(rows);
 
     if (error) {
       setMessage(error.message.includes("app_assignments") ? "任務資料表還沒建立，請先執行 teacher-tools-upgrade.sql。" : error.message);
       return;
     }
 
-    setMessage("任務已指定給學生。");
+    setMessage(`任務已指定給 ${selectedStudentIds.length} 位學生。`);
     setNote("");
     await loadAssignments();
   }
 
   const studentName = (id: string) => students.find((row) => row.profile.id === id)?.profile.name || "學生";
   const lessonTitle = (id: string) => appLessons.find((lesson) => lesson.id === id)?.title || id;
+  const allSelected = students.length > 0 && selectedStudentIds.length === students.length;
+
+  function toggleStudent(id: string) {
+    setSelectedStudentIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+  }
 
   return (
     <div className="grid two">
@@ -410,10 +416,23 @@ function Assignments({ students, teacher, supabaseReady }: { students: StudentRo
         <h3>指定任務</h3>
         <form className="form" onSubmit={(event) => { event.preventDefault(); createAssignment(); }}>
           <div className="field">
-            <label>學生</label>
-            <select value={studentId} onChange={(event) => setStudentId(event.target.value)}>
-              {students.length ? students.map((s) => <option key={s.profile.id} value={s.profile.id}>{s.profile.name}</option>) : <option value="">請先建立學生</option>}
-            </select>
+            <label>學生 / 全班</label>
+            <div className="check-panel">
+              <label className="check-row">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={(event) => setSelectedStudentIds(event.target.checked ? students.map((row) => row.profile.id) : [])}
+                />
+                <span>全選目前所有學生（暫作全班派發）</span>
+              </label>
+              {students.length ? students.map((s) => (
+                <label className="check-row" key={s.profile.id}>
+                  <input type="checkbox" checked={selectedStudentIds.includes(s.profile.id)} onChange={() => toggleStudent(s.profile.id)} />
+                  <span>{s.profile.avatar || "⭐"} {s.profile.name} · {s.profile.username}</span>
+                </label>
+              )) : <p className="muted">請先建立學生。</p>}
+            </div>
           </div>
           <div className="field">
             <label>課程</label>
@@ -434,7 +453,7 @@ function Assignments({ students, teacher, supabaseReady }: { students: StudentRo
           <div className="field"><label>截止日期</label><input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} /></div>
           <div className="field"><label>老師備註</label><textarea rows={3} value={note} onChange={(event) => setNote(event.target.value)} placeholder="例如：今天完成聽力和閱讀" /></div>
           {message && <p className={message.includes("已指定") ? "success-text" : "form-error"}>{message}</p>}
-          <button className="btn primary" type="submit" disabled={!students.length}>建立指定任務</button>
+          <button className="btn primary" type="submit" disabled={!students.length || !selectedStudentIds.length}>建立指定任務</button>
         </form>
       </article>
 
@@ -458,13 +477,36 @@ function Assignments({ students, teacher, supabaseReady }: { students: StudentRo
 function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabaseReady: boolean }) {
   const totalWords = useMemo(() => appLessons.reduce((sum, lesson) => sum + lesson.words.length, 0), []);
   const [drafts, setDrafts] = useState<CourseDraft[]>([]);
+  const [sourceLessonId, setSourceLessonId] = useState(appLessons[0].id);
   const [editingId, setEditingId] = useState("");
   const [title, setTitle] = useState("");
   const [topic, setTopic] = useState("");
   const [level, setLevel] = useState(1);
   const [cover, setCover] = useState("📘");
   const [pattern, setPattern] = useState("I see a ____.");
+  const [sentencesText, setSentencesText] = useState("");
+  const [wordsText, setWordsText] = useState("");
+  const [listenText, setListenText] = useState("");
+  const [readText, setReadText] = useState("");
+  const [speakText, setSpeakText] = useState("");
+  const [writeText, setWriteText] = useState("");
   const [message, setMessage] = useState("");
+
+  function loadLessonTemplate(lesson = appLessons.find((item) => item.id === sourceLessonId) || appLessons[0]) {
+    setEditingId(lesson.id);
+    setTitle(lesson.title);
+    setTopic(lesson.topic);
+    setLevel(lesson.level);
+    setCover(lesson.cover);
+    setPattern(lesson.pattern);
+    setSentencesText(lesson.sentences.map((item) => `${item.en} | ${item.zh} | ${item.image}`).join("\n"));
+    setWordsText(lesson.words.map((item) => `${item.word} | ${item.meaning} | ${item.part} | ${item.image} | ${item.example} | ${item.translation} | ${item.level}`).join("\n"));
+    setListenText(lesson.listen.map((item) => `${item.prompt} | ${item.answer} | ${item.options.join(", ")} | ${item.audio || ""}`).join("\n"));
+    setReadText(lesson.read.map((item) => `${item.prompt} | ${item.answer} | ${item.options.join(", ")}`).join("\n"));
+    setSpeakText(lesson.speak.map((item) => `${item.prompt} | ${item.target}`).join("\n"));
+    setWriteText(lesson.write.map((item) => `${item.prompt} | ${item.starter} | ${item.answerHint}`).join("\n"));
+    setMessage("已載入現有課程，可修改後儲存為草稿。");
+  }
 
   async function loadDrafts() {
     if (!supabaseReady || !supabase) return;
@@ -488,6 +530,13 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
     setLevel(draft.level);
     setCover(draft.cover);
     setPattern(draft.pattern);
+    const content = draft.content as any;
+    setSentencesText(content.sentencesText || "");
+    setWordsText(content.wordsText || "");
+    setListenText(content.listenText || "");
+    setReadText(content.readText || "");
+    setSpeakText(content.speakText || "");
+    setWriteText(content.writeText || "");
     setMessage("");
   }
 
@@ -498,6 +547,12 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
     setLevel(1);
     setCover("📘");
     setPattern("I see a ____.");
+    setSentencesText("");
+    setWordsText("");
+    setListenText("");
+    setReadText("");
+    setSpeakText("");
+    setWriteText("");
   }
 
   async function saveDraft() {
@@ -519,7 +574,14 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
       cover,
       pattern,
       status: "draft",
-      content: {},
+      content: {
+        sentencesText,
+        wordsText,
+        listenText,
+        readText,
+        speakText,
+        writeText
+      },
       updated_by: teacher.id,
       updated_at: new Date().toISOString()
     });
@@ -550,14 +612,29 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
         </table>
       </article>
       <article className="panel">
-        <h3>新增 / 編輯課程草稿</h3>
-        <p className="muted">目前先儲存為後台草稿，不會立即改動學生端課程；下一階段會加入「發布到學生端」。</p>
+        <h3>新增 / 編輯完整課程草稿</h3>
+        <p className="muted">可選現有課程載入模板，修改故事、單字、聽說讀寫。草稿不會立即改動學生端，下一階段再加入發布。</p>
+        <div className="field">
+          <label>選擇現有課程作為模板</label>
+          <div className="inline-controls">
+            <select value={sourceLessonId} onChange={(event) => setSourceLessonId(event.target.value)}>
+              {appLessons.map((lesson) => <option key={lesson.id} value={lesson.id}>{lesson.title}</option>)}
+            </select>
+            <button className="btn secondary" type="button" onClick={() => loadLessonTemplate()}>載入編輯</button>
+          </div>
+        </div>
         <form className="form" onSubmit={(event) => { event.preventDefault(); saveDraft(); }}>
           <div className="field"><label>課程名稱</label><input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="例如：At the Park" /></div>
           <div className="field"><label>主題</label><input value={topic} onChange={(event) => setTopic(event.target.value)} placeholder="例如：Nature" /></div>
           <div className="field"><label>Level</label><input type="number" min={1} max={6} value={level} onChange={(event) => setLevel(Number(event.target.value))} /></div>
           <div className="field"><label>封面圖示</label><input value={cover} onChange={(event) => setCover(event.target.value)} /></div>
           <div className="field"><label>句型</label><input value={pattern} onChange={(event) => setPattern(event.target.value)} /></div>
+          <div className="field"><label>故事句子（一行一個：英文 | 中文 | 圖示）</label><textarea rows={5} value={sentencesText} onChange={(event) => setSentencesText(event.target.value)} /></div>
+          <div className="field"><label>單字（一行一個：word | 中文 | 詞性 | 圖示 | 例句 | 翻譯 | Level）</label><textarea rows={6} value={wordsText} onChange={(event) => setWordsText(event.target.value)} /></div>
+          <div className="field"><label>聽力題（一行一題：題目 | 答案 | 選項1, 選項2, 選項3 | 音訊文字）</label><textarea rows={5} value={listenText} onChange={(event) => setListenText(event.target.value)} /></div>
+          <div className="field"><label>閱讀題（一行一題：題目 | 答案 | 選項1, 選項2, 選項3）</label><textarea rows={5} value={readText} onChange={(event) => setReadText(event.target.value)} /></div>
+          <div className="field"><label>口說任務（一行一題：提示 | 目標句）</label><textarea rows={4} value={speakText} onChange={(event) => setSpeakText(event.target.value)} /></div>
+          <div className="field"><label>寫作任務（一行一題：提示 | 開頭句 | 答案提示）</label><textarea rows={4} value={writeText} onChange={(event) => setWriteText(event.target.value)} /></div>
           {message && <p className={message.includes("已儲存") ? "success-text" : "form-error"}>{message}</p>}
           <div className="btns">
             <button className="btn primary" type="submit">{editingId ? "更新草稿" : "新增草稿"}</button>
