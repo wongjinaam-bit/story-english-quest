@@ -845,7 +845,11 @@ function makeLesson(seed: LessonSeed): Lesson {
       { id: `${seed.id}-write-story`, prompt: seed.difficulty === "advanced" ? "寫出故事中的重要細節" : "替換單字造句", starter: firstSentence.en.replace(firstWord.word, "____"), answerHint: firstWord.word },
       { id: `${seed.id}-write-own`, prompt: seed.comprehension?.writingPrompt || "寫一句自己的句子", starter: "I can write about ____.", answerHint: seed.topic.toLowerCase() }
     ],
-    sortOrder: seed.difficulty === "beginner" ? 1000 + seed.level * 10 : seed.difficulty === "intermediate" ? 9000 + seed.level * 10 : 17000 + seed.level * 10,
+    sortOrder: seed.difficulty === "beginner"
+      ? 9000 + Math.max(0, extraLessonSeeds.findIndex((item) => item.id === seed.id)) * 100
+      : seed.difficulty === "intermediate"
+        ? 20000 + Math.max(0, extraLessonSeeds.findIndex((item) => item.id === seed.id)) * 100
+        : 30000 + Math.max(0, extraLessonSeeds.findIndex((item) => item.id === seed.id)) * 100,
     unlockMode: "previous"
   };
 }

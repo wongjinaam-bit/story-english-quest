@@ -672,6 +672,7 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
   const [unlockMode, setUnlockMode] = useState<"open" | "previous" | "specific">("open");
   const [prerequisiteLessonId, setPrerequisiteLessonId] = useState(appLessons[0].id);
   const [message, setMessage] = useState("");
+  const [aiTopic, setAiTopic] = useState("school");
 
   function loadLessonTemplate(lesson = appLessons.find((item) => item.id === sourceLessonId) || appLessons[0]) {
     setEditingId(lesson.id);
@@ -804,6 +805,10 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
     setView("editor");
   }
 
+  function generateAiCourseContent() {
+    buildSimpleAiCourse(aiTopic || topic || "school");
+  }
+
   async function saveDraft(nextStatus: "draft" | "published" = "draft") {
     setMessage("");
     if (!supabaseReady || !supabase || !teacher) {
@@ -932,6 +937,145 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
     return (value || "").split("\n").filter((line) => line.trim()).length;
   }
 
+  function buildSimpleAiCourse(topicKey: string) {
+    const packs: Record<string, { title: string; topic: string; cover: string; words: [string, string, string, string, string, string][] }> = {
+      school: {
+        title: "A Busy School Day",
+        topic: "School",
+        cover: "🏫",
+        words: [
+          ["classroom", "教室", "noun", "🏫", "I am in the classroom.", "我在教室裡。"],
+          ["book", "書", "noun", "📘", "I read a book.", "我讀一本書。"],
+          ["pencil", "鉛筆", "noun", "✏️", "I have a pencil.", "我有一支鉛筆。"],
+          ["write", "寫", "verb", "📝", "I write a sentence.", "我寫一個句子。"],
+          ["teacher", "老師", "noun", "👩‍🏫", "The teacher helps me.", "老師幫助我。"],
+          ["practice", "練習", "verb", "🎯", "I practice English.", "我練習英文。"]
+        ]
+      },
+      food: {
+        title: "My Tasty Lunch",
+        topic: "Food",
+        cover: "🍱",
+        words: [
+          ["lunch", "午餐", "noun", "🍱", "I eat lunch.", "我吃午餐。"],
+          ["rice", "米飯", "noun", "🍚", "I like rice.", "我喜歡米飯。"],
+          ["egg", "雞蛋", "noun", "🥚", "This is an egg.", "這是一顆雞蛋。"],
+          ["milk", "牛奶", "noun", "🥛", "I drink milk.", "我喝牛奶。"],
+          ["share", "分享", "verb", "🤝", "I share my food.", "我分享我的食物。"],
+          ["sweet", "甜的", "adjective", "🍪", "The cookie is sweet.", "餅乾是甜的。"]
+        ]
+      },
+      animals: {
+        title: "A Funny Animal Show",
+        topic: "Animals",
+        cover: "🦁",
+        words: [
+          ["zoo", "動物園", "noun", "🏞️", "I go to the zoo.", "我去動物園。"],
+          ["lion", "獅子", "noun", "🦁", "The lion is big.", "獅子很大。"],
+          ["monkey", "猴子", "noun", "🐵", "The monkey can jump.", "猴子會跳。"],
+          ["jump", "跳", "verb", "⬆️", "I can jump.", "我會跳。"],
+          ["funny", "有趣的", "adjective", "😄", "The monkey is funny.", "猴子很有趣。"],
+          ["watch", "觀看", "verb", "👀", "I watch the animals.", "我看動物。"]
+        ]
+      },
+      family: {
+        title: "Helping My Family",
+        topic: "Family",
+        cover: "👨‍👩‍👧",
+        words: [
+          ["family", "家庭", "noun", "👨‍👩‍👧", "I love my family.", "我愛我的家庭。"],
+          ["mom", "媽媽", "noun", "👩", "Mom cooks dinner.", "媽媽煮晚餐。"],
+          ["dad", "爸爸", "noun", "👨", "Dad reads a story.", "爸爸讀故事。"],
+          ["help", "幫助", "verb", "🤝", "I help at home.", "我在家幫忙。"],
+          ["clean", "清潔", "verb", "🧹", "I clean the table.", "我清潔桌子。"],
+          ["kind", "親切的", "adjective", "💛", "My family is kind.", "我的家人很親切。"]
+        ]
+      },
+      feelings: {
+        title: "My Brave Feeling",
+        topic: "Feelings",
+        cover: "😊",
+        words: [
+          ["happy", "開心的", "adjective", "😊", "I am happy.", "我很開心。"],
+          ["nervous", "緊張的", "adjective", "😬", "I feel nervous.", "我感到緊張。"],
+          ["brave", "勇敢的", "adjective", "🦸", "I can be brave.", "我可以很勇敢。"],
+          ["smile", "微笑", "verb", "🙂", "I smile at my friend.", "我對朋友微笑。"],
+          ["try", "嘗試", "verb", "🎯", "I try again.", "我再試一次。"],
+          ["better", "更好的", "adjective", "🌈", "I feel better.", "我感覺好多了。"]
+        ]
+      },
+      daily: {
+        title: "My Little Daily Plan",
+        topic: "Daily Life",
+        cover: "🌞",
+        words: [
+          ["morning", "早上", "noun", "🌞", "It is morning.", "現在是早上。"],
+          ["plan", "計劃", "noun", "📝", "I make a plan.", "我制定一個計劃。"],
+          ["walk", "走路", "verb", "🚶", "I walk to school.", "我走路去學校。"],
+          ["play", "玩", "verb", "⚽", "I play after class.", "我下課後玩。"],
+          ["finish", "完成", "verb", "✅", "I finish my work.", "我完成我的作業。"],
+          ["tired", "累的", "adjective", "😴", "I am tired.", "我很累。"]
+        ]
+      }
+    };
+    const pack = packs[topicKey] || packs.school;
+    const action = pack.words.find((word) => word[2] === "verb") || pack.words[3];
+    const adjective = pack.words.find((word) => word[2] === "adjective") || pack.words[5];
+    const story = difficulty === "advanced"
+      ? [
+        `Today I have a plan about ${pack.topic.toLowerCase()}. | 今天我有一個關於${pack.topic}的計劃。 | ${pack.cover}`,
+        `I use my ${pack.words[2][0]} and try to ${action[0]} carefully. | 我使用我的${pack.words[2][1]}，並仔細嘗試${action[1]}。 | ${pack.words[2][3]}`,
+        `At first, I feel ${adjective[0]}, but I keep practicing. | 一開始我覺得${adjective[1]}，但我繼續練習。 | ${adjective[3]}`,
+        "Small steps help me learn more English. | 小小的步驟幫助我學更多英文。 | ⭐",
+        "I learned that practice can make me better. | 我學到練習可以讓我更進步。 | 🌈"
+      ]
+      : difficulty === "intermediate"
+        ? [
+          `I learn about ${pack.topic.toLowerCase()} today. | 我今天學習${pack.topic}。 | ${pack.cover}`,
+          `I see a ${pack.words[0][0]} and a ${pack.words[1][0]}. | 我看到${pack.words[0][1]}和${pack.words[1][1]}。 | ${pack.words[0][3]}`,
+          `I try to ${action[0]} with my friend. | 我嘗試和朋友一起${action[1]}。 | ${action[3]}`,
+          `It is a ${adjective[0]} day. | 這是${adjective[1]}的一天。 | ${adjective[3]}`,
+          "I can tell the story in English. | 我可以用英文說這個故事。 | 🗣️"
+        ]
+        : [
+          `I see a ${pack.words[0][0]}. | 我看到${pack.words[0][1]}。 | ${pack.words[0][3]}`,
+          `This is my ${pack.words[1][0]}. | 這是我的${pack.words[1][1]}。 | ${pack.words[1][3]}`,
+          `I can ${action[0]}. | 我會${action[1]}。 | ${action[3]}`,
+          `I am ${adjective[0]}. | 我很${adjective[1]}。 | ${adjective[3]}`
+        ];
+    const meaningOptions = pack.words.slice(0, 4).map((word) => word[1]).join(", ");
+    const wordOptions = pack.words.slice(0, 4).map((word) => word[0]).join(", ");
+    setTitle(title.trim() || pack.title);
+    setTopic(pack.topic);
+    setCover(pack.cover);
+    setPattern(difficulty === "advanced" ? "I learned that ____." : difficulty === "intermediate" ? "I can ____ because it helps me." : "I can ____.");
+    setSentencesText(story.join("\n"));
+    setWordsText(pack.words.map((word, index) => `${word.join(" | ")} | Level ${Math.min(level + (index > 3 ? 1 : 0), 6)}`).join("\n"));
+    setListenText([
+      `聽單字，選出正確意思：${pack.words[0][0]} | ${pack.words[0][1]} | ${meaningOptions} | ${pack.words[0][0]}`,
+      `聽句子，選出你聽到的句子 | ${pack.words[0][4]} | ${pack.words.slice(0, 4).map((word) => word[4]).join(", ")} | ${pack.words[0][4]}`,
+      `聽故事，選出重要動作 | ${action[0]} | ${wordOptions} | ${story.map((line) => line.split(" | ")[0]).join(" ")}`
+    ].join("\n"));
+    setReadText([
+      `Which word means「${pack.words[0][1]}」? | ${pack.words[0][0]} | ${wordOptions}`,
+      `Which sentence is about "${action[0]}"? | ${action[4]} | ${pack.words.slice(0, 4).map((word) => word[4]).join(", ")}`,
+      difficulty === "advanced" ? "What is the main idea? | Practice can make me better. | Practice can make me better., Lunch is sweet., The bag is lost., The zoo is closed." : `Which feeling word appears in the story? | ${adjective[0]} | ${wordOptions}`,
+      difficulty === "advanced" ? `Choose the correct grammar sentence. | I can ${action[0]}. | I can ${action[0]}., I cans ${action[0]}., I can ${action[0]}s., I can to ${action[0]}.` : `Where is the story topic? | ${pack.topic} | ${pack.topic}, Weather, Sports, Music`
+    ].join("\n"));
+    setSpeakText([
+      `跟讀單字 | ${pack.words[0][0]}`,
+      `跟讀單字 | ${action[0]}`,
+      `跟讀句子 | ${pack.words[0][4]}`,
+      `看圖說一句 | I can ${action[0]}.`
+    ].join("\n"));
+    setWriteText([
+      `完成句子 | I can ____. | ${action[0]}`,
+      `寫出故事中的重要細節 | I learn about ____. | ${pack.topic.toLowerCase()}`,
+      difficulty === "advanced" ? "語法填空 | Practice can ____ me better. | make" : `替換單字造句 | I see my ____. | ${pack.words[1][0]}`
+    ].join("\n"));
+    setMessage("AI 已生成完整課程草稿。請先預覽和修改，再儲存或發布。");
+  }
+
   function openCourseEditor(row: (typeof courseRows)[number]) {
     if (row.draft) {
       editDraft(row.draft);
@@ -987,6 +1131,21 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
                 </select>
                 <button className="btn secondary" type="button" onClick={() => loadLessonTemplate()}>載入模板</button>
               </div>
+            </div>
+            <div className="field ai-course-box">
+              <label>AI 生成課程內容</label>
+              <div className="inline-controls">
+                <select value={aiTopic} onChange={(event) => setAiTopic(event.target.value)}>
+                  <option value="school">School 學校</option>
+                  <option value="food">Food 食物</option>
+                  <option value="family">Family 家庭</option>
+                  <option value="animals">Animals 動物</option>
+                  <option value="feelings">Feelings 感受</option>
+                  <option value="daily">Daily Life 生活</option>
+                </select>
+                <button className="btn ghost" type="button" onClick={generateAiCourseContent}>AI 生成完整草稿</button>
+              </div>
+              <small>會生成故事、單字、聽力、閱讀、口說、寫作。發布前仍可人工修改。</small>
             </div>
           </div>
 

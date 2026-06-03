@@ -1110,6 +1110,7 @@ function WriteTask({ lesson, onAnswer, onDone }: {
 }) {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [checked, setChecked] = useState<Record<string, { correct: boolean; correctAnswer: string }>>({});
+  const [aiTips, setAiTips] = useState<Record<string, WritingFeedback>>({});
   const complete = lesson.write.every((item) => checked[item.id]);
   if (!lesson.write.length) {
     return (
@@ -1135,6 +1136,9 @@ function WriteTask({ lesson, onAnswer, onDone }: {
               <textarea rows={3} placeholder="在這裡寫英文句子，不用怕錯，提交後會看到正確答案。" value={answers[task.id] || ""} onChange={(event) => setAnswers({ ...answers, [task.id]: event.target.value })} />
             </div>
             <div className="btns">
+              <button className="btn ghost" disabled={!answers[task.id]?.trim()} onClick={() => {
+                setAiTips((current) => ({ ...current, [task.id]: getSimpleWritingFeedback(answers[task.id] || "", task, lesson) }));
+              }}>AI 小提示</button>
               <button className="btn secondary" disabled={!answers[task.id]?.trim() || Boolean(checked[task.id])} onClick={() => {
                 const answer = answers[task.id] || "";
                 const correctAnswer = task.answerHint.trim();
@@ -1143,6 +1147,7 @@ function WriteTask({ lesson, onAnswer, onDone }: {
                 onAnswer("write", `${task.prompt}：${task.starter}`, correct, answer, correctAnswer);
               }}>提交答案</button>
             </div>
+            {aiTips[task.id] && <WritingFeedbackCard feedback={aiTips[task.id]} />}
             {checked[task.id] && (
               <p className={checked[task.id].correct ? "success-text" : "form-error"}>
                 {checked[task.id].correct ? "寫得很好！" : `還差一點，正確答案參考：${checked[task.id].correctAnswer}`}
@@ -1153,8 +1158,8 @@ function WriteTask({ lesson, onAnswer, onDone }: {
         <button className="btn primary full" disabled={!complete} onClick={onDone}>完成寫作任務</button>
       </article>
       <aside className="panel">
-        <h3>寫作小幫手</h3>
-        <p className="muted">先看空格前後的字，再從本課單字挑可能合適的詞。這裡只給線索，不直接給答案。</p>
+        <h3>AI 寫作小老師</h3>
+        <p className="muted">簡單版 AI 會先用規則幫學生看句子，給鼓勵和方向，不會直接代寫答案。</p>
         <div className="hint-board">
           {lesson.words.slice(0, 6).map((word) => (
             <span key={word.word}>{word.image} {word.part}</span>
@@ -1163,6 +1168,77 @@ function WriteTask({ lesson, onAnswer, onDone }: {
       </aside>
     </section>
   );
+}
+
+type WritingFeedback = {
+  mood: "great" | "good" | "try";
+  title: string;
+  notes: string[];
+  nextStep: string;
+};
+
+function WritingFeedbackCard({ feedback }: { feedback: WritingFeedback }) {
+  return (
+    <div className={`ai-feedback ${feedback.mood}`}>
+      <div>
+        <span className="ai-badge">AI</span>
+        <strong>{feedback.title}</strong>
+      </div>
+      <ul>
+        {feedback.notes.map((note) => <li key={note}>{note}</li>)}
+      </ul>
+      <p>{feedback.nextStep}</p>
+    </div>
+  );
+}
+
+function getSimpleWritingFeedback(answer: string, task: WritingTask, lesson: Lesson): WritingFeedback {
+  const clean = answer.trim();
+  const lower = clean.toLowerCase();
+  const words = clean.match(/[a-zA-Z]+/g) || [];
+  const usedLessonWords = lesson.words.filter((word) => lower.includes(word.word.toLowerCase()));
+  const notes: string[] = [];
+
+  if (words.length >= 5) {
+    notes.push("句子內容比較完整，有開始表達想法。");
+  } else if (words.length >= 2) {
+    notes.push("你已經寫出關鍵字，可以再補一點細節。");
+  } else {
+    notes.push("先寫一個簡短句子也可以，例如加入人物、動作或物品。");
+  }
+
+  if (usedLessonWords.length) {
+    notes.push(`有用到本課單字：${usedLessonWords.slice(0, 3).map((word) => word.word).join(", ")}。`);
+  } else {
+    notes.push("試著加入一個本課單字，句子會更貼近故事。");
+  }
+
+  if (/^[A-Z]/.test(clean)) {
+    notes.push("開頭有大寫，格式很好。");
+  } else {
+    notes.push("英文句子開頭可以用大寫。");
+  }
+
+  if (/[.!?]$/.test(clean)) {
+    notes.push("句尾有標點，讀起來更完整。");
+  } else {
+    notes.push("句尾可以加上句號。");
+  }
+
+  const hasLikelyAnswer = task.answerHint
+    .split("/")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean)
+    .some((item) => lower.includes(item));
+
+  return {
+    mood: hasLikelyAnswer ? "great" : words.length >= 3 ? "good" : "try",
+    title: hasLikelyAnswer ? "很接近正確答案！" : words.length >= 3 ? "方向不錯，還可以更完整。" : "先完成一個小句子。",
+    notes,
+    nextStep: hasLikelyAnswer
+      ? "現在可以按「提交答案」看看結果。"
+      : `再看一次提示：「${friendlyWritingHint(task, lesson)}」`
+  };
 }
 
 function friendlyWritingHint(task: { starter: string; answerHint: string }, lesson: Lesson) {
@@ -1203,6 +1279,81 @@ function findReviewContext(label: string, lessons: Lesson[]): { word?: Word; que
   return {};
 }
 
+function buildAiReviewExercises(items: { label: string; skill: Skill }[], lessons: Lesson[]) {
+  const exercises: { id: string; lessonTitle: string; question: ChoiceQuestion }[] = [];
+  const allWords = lessons.flatMap((lesson) => lesson.words);
+  const allMeanings = unique(allWords.map((word) => word.meaning).filter(Boolean));
+  const allWordTexts = unique(allWords.map((word) => word.word).filter(Boolean));
+
+  for (const item of items.slice(0, 4)) {
+    const context = findReviewContext(item.label, lessons);
+    const lesson = context.lesson;
+    if (context.word && lesson) {
+      exercises.push({
+        id: `ai-word-${item.label}`,
+        lessonTitle: lesson.title,
+        question: {
+          id: `ai-word-${item.label}`,
+          skill: item.skill,
+          type: "choice",
+          prompt: `AI 複習：Which word means「${context.word.meaning}」?`,
+          answer: context.word.word,
+          options: fillOptions(context.word.word, allWordTexts)
+        }
+      });
+      continue;
+    }
+    if (context.question && lesson) {
+      exercises.push({
+        id: `ai-question-${item.label}`,
+        lessonTitle: lesson.title,
+        question: {
+          id: `ai-question-${item.label}`,
+          skill: item.skill,
+          type: "choice",
+          prompt: `AI 相似題：${context.question.prompt}`,
+          answer: context.question.answer,
+          options: shuffleQuestionOptions(context.question.options, context.question.answer, `ai-${context.question.id}`)
+        }
+      });
+      continue;
+    }
+    if (context.writing && lesson) {
+      const target = context.writing.answerHint.split("/")[0]?.trim() || lesson.words[0]?.word || lesson.topic;
+      exercises.push({
+        id: `ai-writing-${item.label}`,
+        lessonTitle: lesson.title,
+        question: {
+          id: `ai-writing-${item.label}`,
+          skill: "write",
+          type: "choice",
+          prompt: `AI 寫作預備：這個空格可能要填哪個字？${context.writing.starter}`,
+          answer: target,
+          options: fillOptions(target, allWordTexts)
+        }
+      });
+      continue;
+    }
+    const fallbackWord = allWords[0];
+    if (fallbackWord) {
+      exercises.push({
+        id: `ai-fallback-${item.label}`,
+        lessonTitle: "AI Review",
+        question: {
+          id: `ai-fallback-${item.label}`,
+          skill: item.skill,
+          type: "choice",
+          prompt: `AI 複習：聽過或看過的單字「${fallbackWord.word}」是什麼意思？`,
+          answer: fallbackWord.meaning,
+          options: fillOptions(fallbackWord.meaning, allMeanings)
+        }
+      });
+    }
+  }
+
+  return exercises.slice(0, 3);
+}
+
 function Review({ progress, lessons, speak, onAnswer }: {
   progress: StudentProgress;
   lessons: Lesson[];
@@ -1218,6 +1369,7 @@ function Review({ progress, lessons, speak, onAnswer }: {
   const dueItems = items.filter((item) => item.nextReview <= today);
   const laterItems = items.filter((item) => item.nextReview > today);
   const visibleItems = filter === "due" ? dueItems : filter === "later" ? laterItems : items;
+  const aiExercises = useMemo(() => buildAiReviewExercises(visibleItems, lessons), [visibleItems, lessons]);
 
   function choose(item: { label: string; skill: Skill }, question: ChoiceQuestion, answer: string, reviewLessonId?: string) {
     const correct = answer === question.answer;
@@ -1254,6 +1406,46 @@ function Review({ progress, lessons, speak, onAnswer }: {
         <button className={filter === "due" ? "active" : ""} onClick={() => setFilter("due")}>今天要複習 {dueItems.length}</button>
         <button className={filter === "later" ? "active" : ""} onClick={() => setFilter("later")}>之後複習 {laterItems.length}</button>
       </div>
+      {aiExercises.length > 0 && (
+        <article className="panel ai-practice-panel">
+          <div className="section-title compact">
+            <div>
+              <p className="eyebrow">AI Practice</p>
+              <h3>AI 加強練習</h3>
+              <p className="muted">根據目前錯題自動生成幾題相似練習，先用簡單版 AI 規則產生。</p>
+            </div>
+          </div>
+          <div className="grid cards">
+            {aiExercises.map((exercise) => {
+              const selected = picked[exercise.id];
+              return (
+                <div className="mini-practice" key={exercise.id}>
+                  <span className="pill blue">{exercise.lessonTitle}</span>
+                  <h3>{exercise.question.prompt}</h3>
+                  <div className="options review-options">
+                    {exercise.question.options.map((option) => (
+                      <button
+                        key={option}
+                        className={`option ${selected && option === exercise.question.answer ? "correct" : ""} ${selected === option && option !== exercise.question.answer ? "wrong" : ""}`}
+                        onClick={() => {
+                          setPicked((current) => ({ ...current, [exercise.id]: option }));
+                          setFeedback((current) => ({
+                            ...current,
+                            [exercise.id]: option === exercise.question.answer ? "答對了，這題是 AI 加強練習。" : `再想想，答案是 ${exercise.question.answer}。`
+                          }));
+                        }}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                  {feedback[exercise.id] && <p className="success-text">{feedback[exercise.id]}</p>}
+                </div>
+              );
+            })}
+          </div>
+        </article>
+      )}
       <div className="grid cards">
         {visibleItems.length ? visibleItems.map((item) => {
           const context = findReviewContext(item.label, lessons);
