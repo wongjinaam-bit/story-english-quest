@@ -249,6 +249,51 @@ function skillPercent(progress: StudentProgress | null, skill: "listen" | "speak
   return completedCount ? 100 : 0;
 }
 
+const teacherSkillLabels: Record<Skill, string> = {
+  listen: "聽力",
+  speak: "口說",
+  read: "閱讀",
+  write: "寫作"
+};
+
+const reportSkills: Skill[] = ["listen", "speak", "read", "write"];
+
+function lessonReportLessons(progress: StudentProgress | null, baseLessons: Lesson[]) {
+  const knownIds = new Set(baseLessons.map((lesson) => lesson.id));
+  const dynamicIds = new Set<string>();
+  progress?.completedLessons.forEach((id) => dynamicIds.add(id));
+  Object.keys(progress?.completedSkills || {}).forEach((id) => dynamicIds.add(id));
+  progress?.answers.forEach((answer) => dynamicIds.add(answer.lessonId));
+
+  const extraLessons: Lesson[] = Array.from(dynamicIds)
+    .filter((id) => !knownIds.has(id))
+    .map((id, index) => ({
+      id,
+      title: `自訂課程 ${index + 1}`,
+      topic: "Teacher Course",
+      level: 1,
+      cover: "📘",
+      pattern: "",
+      sentences: [],
+      words: [],
+      listen: [],
+      read: [],
+      speak: [],
+      write: [],
+      sortOrder: 100000 + index
+    }));
+
+  return [...baseLessons, ...extraLessons];
+}
+
+function lessonReportStatus(progress: StudentProgress | null, lesson: Lesson) {
+  const completedSkills = progress?.completedSkills[lesson.id] || [];
+  const answers = progress?.answers.filter((answer) => answer.lessonId === lesson.id) || [];
+  const wrongAnswers = answers.filter((answer) => !answer.correct);
+  const completed = Boolean(progress?.completedLessons.includes(lesson.id));
+  return { completedSkills, answers, wrongAnswers, completed };
+}
+
 function Students({
   students,
   loading,
@@ -262,6 +307,21 @@ function Students({
   selectedStudentId: string | null;
   onSelectStudent: (id: string | null) => void;
 }) {
+  const [teacherReportLessons, setTeacherReportLessons] = useState<Lesson[]>(appLessons);
+
+  useEffect(() => {
+    async function loadTeacherReportLessons() {
+      if (!supabaseReady || !supabase) {
+        setTeacherReportLessons(appLessons);
+        return;
+      }
+      const { data, error } = await supabase.from("course_drafts").select("*").eq("status", "published");
+      if (error) return;
+      setTeacherReportLessons(mergePublishedLessons(appLessons, (data || []) as CourseDraft[]));
+    }
+    loadTeacherReportLessons();
+  }, [supabaseReady]);
+
   if (!supabaseReady) {
     return (
       <article className="panel">
@@ -280,18 +340,19 @@ function Students({
 
   const selected = students.find((row) => row.profile.id === selectedStudentId) || students[0] || null;
   const mistakes = Object.values(selected?.progress?.mistakes || {}).sort((a, b) => b.count - a.count);
-  const recentWrongAnswers = (selected?.progress?.answers || [])
-    .filter((item) => !item.correct)
-    .slice(-8)
-    .reverse();
+  const reportLessons = lessonReportLessons(selected?.progress || null, teacherReportLessons);
+  const unfinishedLessons = reportLessons.filter((lesson) => !selected?.progress?.completedLessons.includes(lesson.id));
 
   return (
     <div className="grid two teacher-student-layout">
       <article className="panel">
-        <h3>學生列表</h3>
+        <div className="section-title compact">
+          <h3>學生列表</h3>
+          <span className="pill blue">{students.length} 位學生</span>
+        </div>
         {loading ? <p className="muted">載入學生資料中...</p> : (
           <table className="table">
-            <thead><tr><th>學生</th><th>帳號</th><th>完成故事</th><th>星星</th><th>錯題</th><th>最後更新</th></tr></thead>
+            <thead><tr><th>學生</th><th>帳號</th><th>完成故事</th><th>星星</th><th>錯題</th><th>操作</th></tr></thead>
             <tbody>
               {students.map((row) => (
                 <tr
@@ -304,7 +365,7 @@ function Students({
                   <td>{row.progress?.completedLessons.length || 0}</td>
                   <td>{row.progress?.stars || 0}</td>
                   <td>{Object.keys(row.progress?.mistakes || {}).length}</td>
-                  <td>{row.updated_at ? new Date(row.updated_at).toLocaleString("zh-Hant") : "尚未開始"}</td>
+                  <td><button className="btn ghost small-btn" type="button">查看報告</button></td>
                 </tr>
               ))}
             </tbody>
@@ -314,46 +375,90 @@ function Students({
 
       <aside className="panel student-detail-panel">
         {selected ? (
-          <>
+          <div className="student-report">
             <div className="section-title compact">
-              <h3>{selected.profile.avatar || "⭐"} {selected.profile.name}</h3>
-              <span className="pill blue">{selected.profile.username}</span>
+              <div>
+                <h3>{selected.profile.avatar || "⭐"} {selected.profile.name} 的學習報告</h3>
+                <p className="muted">帳號：{selected.profile.username || "未設定"} · 最後更新：{selected.updated_at ? new Date(selected.updated_at).toLocaleString("zh-Hant") : "尚未同步"}</p>
+              </div>
+              <span className="pill blue">學生詳情</span>
             </div>
             <div className="metric-grid compact-metrics">
-              <div className="metric"><strong>{selected.progress?.completedLessons.length || 0}</strong><small>完成故事</small></div>
+              <div className="metric"><strong>{selected.progress?.completedLessons.length || 0}</strong><small>已完成單元</small></div>
+              <div className="metric"><strong>{unfinishedLessons.length}</strong><small>未完成單元</small></div>
               <div className="metric"><strong>{selected.progress?.stars || 0}</strong><small>星星</small></div>
-              <div className="metric"><strong>{mistakes.length}</strong><small>需要複習</small></div>
-              <div className="metric"><strong>{selected.progress?.badges.length || 0}</strong><small>徽章</small></div>
+              <div className="metric"><strong>{mistakes.length}</strong><small>需跟進錯題</small></div>
             </div>
 
-            <h3>技能表現</h3>
-            {(["listen", "speak", "read", "write"] as const).map((skill) => (
-              <div className="bar-row" key={skill}>
-                <label><span>{skill}</span><span>{skillPercent(selected.progress, skill)}%</span></label>
-                <div className="progress"><span style={{ width: `${skillPercent(selected.progress, skill)}%` }} /></div>
+            <section className="editor-section">
+              <div>
+                <h4>聽說讀寫能力</h4>
+                <p>用真實答題記錄計算。學生只完成但沒有答題時，會顯示為已完成，但不當作滿分。</p>
               </div>
-            ))}
+              <div>
+                {reportSkills.map((skill) => (
+                  <div className="bar-row" key={skill}>
+                    <label><span>{teacherSkillLabels[skill]}</span><span>{skillPercent(selected.progress, skill)}%</span></label>
+                    <div className="progress"><span style={{ width: `${skillPercent(selected.progress, skill)}%` }} /></div>
+                  </div>
+                ))}
+              </div>
+            </section>
 
-            <h3>常錯項目</h3>
-            {mistakes.length ? mistakes.slice(0, 5).map((item) => (
-              <p className="mistake-line" key={item.label}>
-                <strong>{item.label}</strong>
-                <small>{item.skill} · 錯 {item.count} 次 · {item.nextReview}</small>
-              </p>
-            )) : <p className="muted">目前沒有錯題。</p>}
-
-            <h3>最近答錯記錄</h3>
-            {recentWrongAnswers.length ? recentWrongAnswers.map((item, index) => (
-              <p className="mistake-line" key={`${item.date}-${index}`}>
-                <strong>{item.label || item.skill}</strong>
-                <small>
-                  {item.skill} · 學生答案：{item.answer || "未記錄"} · 正確答案：{item.correctAnswer || "未記錄"}
-                  <br />
-                  {new Date(item.date).toLocaleString("zh-Hant")}
-                </small>
-              </p>
-            )) : <p className="muted">目前沒有答錯記錄。</p>}
-          </>
+            <section className="editor-section">
+              <div>
+                <h4>單元完成情況</h4>
+                <p>每個單元會列出聽、說、讀、寫哪些部分已完成，以及該單元答錯的題目。</p>
+              </div>
+              <div className="lesson-report-grid">
+                {reportLessons.map((lesson) => {
+                  const status = lessonReportStatus(selected.progress, lesson);
+                  return (
+                    <article className="lesson-report-card" key={lesson.id}>
+                      <div className="lesson-report-head">
+                        <div>
+                          <span className="lesson-cover-mini">{lesson.cover}</span>
+                          <strong>{lesson.title}</strong>
+                          <small>{lesson.topic} · Level {lesson.level}</small>
+                        </div>
+                        <span className={`pill ${status.completed ? "green" : "blue"}`}>
+                          {status.completed ? "已完成" : "未完成"}
+                        </span>
+                      </div>
+                      <div className="skill-chip-row">
+                        {reportSkills.map((skill) => (
+                          <span
+                            className={`skill-chip ${status.completedSkills.includes(skill) ? "done" : "missing"}`}
+                            key={skill}
+                          >
+                            {teacherSkillLabels[skill]} {status.completedSkills.includes(skill) ? "完成" : "未完成"}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="answer-summary">
+                        <span>答題 {status.answers.length} 題</span>
+                        <span>錯題 {status.wrongAnswers.length} 題</span>
+                      </div>
+                      {status.wrongAnswers.length ? (
+                        <div className="answer-list">
+                          {status.wrongAnswers.map((answer, index) => (
+                            <div className="answer-row" key={`${answer.date}-${index}`}>
+                              <strong>{answer.label || teacherSkillLabels[answer.skill]}</strong>
+                              <small>{teacherSkillLabels[answer.skill]} · {new Date(answer.date).toLocaleString("zh-Hant")}</small>
+                              <p>學生答案：{answer.answer || "未記錄"}</p>
+                              <p>正確答案：{answer.correctAnswer || "未記錄"}</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="muted no-answer">這個單元暫時沒有錯題記錄。</p>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+          </div>
         ) : (
           <p className="muted">還沒有學生資料。學生註冊並開始學習後，這裡會出現詳情。</p>
         )}

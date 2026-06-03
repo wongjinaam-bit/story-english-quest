@@ -951,9 +951,9 @@ function WriteTask({ lesson, onAnswer, onDone }: {
 
 function friendlyWritingHint(hint: string) {
   const answers = hint.split("/").map((item) => item.trim()).filter(Boolean);
-  if (!answers.length) return "根據故事和單字卡完成句子。";
-  if (answers.length > 1) return `可用 ${answers.length} 個答案之一，先想想故事裡學過的單字。`;
-  return `答案是 ${answers[0].length} 個字母，請根據句型和故事單字完成。`;
+  if (!answers.length) return "先看句子前後文，再回想故事裡出現過的人物、物品或動作。";
+  if (answers.length > 1) return "這題可能有不只一個合理答案。先判斷空格需要名詞、動詞還是形容詞，再選最符合故事的字。";
+  return "先觀察空格前後的字，想想這裡需要填人物、物品、動作或感覺，再回到本單元單字卡找線索。";
 }
 
 function isWritingCorrect(answer: string, correctAnswer: string) {

@@ -208,8 +208,17 @@ h2, h3, p, strong, small, label { overflow-wrap: anywhere; }
 .table th { color: var(--muted); font-size: 13px; }
 .table tbody tr { cursor: pointer; }
 .table tbody tr:hover, .table tbody tr.selected-row { background: #f4f7ff; }
-.teacher-student-layout { grid-template-columns: minmax(0,1fr) 390px; }
+.teacher-student-layout { grid-template-columns: minmax(360px, 0.85fr) minmax(520px, 1.15fr); }
 .student-detail-panel { position: sticky; top: 22px; }
+.student-report {
+  display: grid;
+  gap: 16px;
+}
+.small-btn {
+  min-height: 38px;
+  padding: 8px 12px;
+  border-radius: 12px;
+}
 .compact-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); margin: 12px 0 18px; }
 .compact-metrics .metric { min-height: 94px; padding: 14px; }
 .mistake-line {
@@ -221,6 +230,98 @@ h2, h3, p, strong, small, label { overflow-wrap: anywhere; }
   background: #f9fbff;
 }
 .mistake-line small { display: block; }
+.lesson-report-grid {
+  display: grid;
+  gap: 14px;
+}
+.lesson-report-card {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+.lesson-report-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.lesson-report-head > div {
+  display: grid;
+  gap: 4px;
+}
+.lesson-report-head strong {
+  font-size: 18px;
+  color: var(--ink);
+}
+.lesson-report-head small,
+.answer-row small {
+  color: var(--muted);
+  font-weight: 800;
+}
+.lesson-cover-mini {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: var(--soft-blue);
+  font-size: 24px;
+}
+.skill-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.skill-chip {
+  border-radius: 999px;
+  padding: 8px 11px;
+  font-size: 13px;
+  font-weight: 900;
+}
+.skill-chip.done {
+  background: var(--soft-mint);
+  color: #13775d;
+}
+.skill-chip.missing {
+  background: #f1f5ff;
+  color: var(--muted);
+}
+.answer-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--muted);
+  font-weight: 900;
+}
+.answer-summary span {
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid var(--line);
+  padding: 7px 10px;
+}
+.answer-list {
+  display: grid;
+  gap: 10px;
+}
+.answer-row {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: #fff;
+}
+.answer-row p {
+  margin: 0;
+  color: var(--ink);
+  font-weight: 800;
+}
+.no-answer {
+  margin: 0;
+}
 .assignment-row {
   display: grid;
   gap: 6px;
