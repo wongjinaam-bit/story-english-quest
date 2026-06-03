@@ -17,7 +17,7 @@ import {
   saveCloudProgress,
   saveStudentSession
 } from "@/lib/progress";
-import type { AppAssignment, ChoiceQuestion, CourseDraft, LearningLevel, Lesson, Skill, StudentProgress, StudentSession, Word } from "@/lib/types";
+import type { AppAssignment, ChoiceQuestion, CourseDraft, LearningLevel, Lesson, Skill, StudentProgress, StudentSession, Word, WritingTask } from "@/lib/types";
 
 type Screen = "home" | "map" | "story" | "vocab" | "listen" | "speak" | "read" | "write" | "review" | "progress";
 
@@ -49,13 +49,31 @@ export function StudentApp() {
   const [assignments, setAssignments] = useState<AppAssignment[]>([]);
   const [cloudStatus, setCloudStatus] = useState("");
   const [allLessons, setAllLessons] = useState<Lesson[]>(appLessons);
+  const [celebrationLesson, setCelebrationLesson] = useState<Lesson | null>(null);
   const lessons = useMemo(() => {
     if (!student) return allLessons;
     const level = defaultLearningLevel(student.proficiencyLevel);
     const assignedIds = new Set(assignments.map((assignment) => assignment.lesson_id));
-    return allLessons.filter((item) => canStudentSeeLesson(level, item, assignedIds.has(item.id)));
+    return sortCourseMapLessons(allLessons.filter((item) => canStudentSeeLesson(level, item, assignedIds.has(item.id))));
   }, [allLessons, assignments, student]);
   const lesson = useMemo(() => lessons.find((item) => item.id === lessonId) || lessons[0] || appLessons[0], [lessonId, lessons]);
+  const practicedLessonIds = useMemo(() => new Set([
+    ...(progress?.completedLessons || []),
+    ...Object.keys(progress?.completedSkills || {}),
+    ...(progress?.answers || []).map((item) => item.lessonId)
+  ].filter(Boolean)), [progress]);
+  const learnedWords = useMemo(() => {
+    const seen = new Set<string>();
+    return allLessons
+      .filter((item) => practicedLessonIds.has(item.id))
+      .flatMap((item) => item.words.map((word) => ({ ...word, lessonTitle: item.title, lessonId: item.id })))
+      .filter((word) => {
+        const key = `${word.lessonId}-${word.word}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+  }, [allLessons, practicedLessonIds]);
   const listenQuestions = useMemo(() => buildLessonPracticeQuestions(lesson, "listen"), [lesson]);
   const readQuestions = useMemo(() => buildLessonPracticeQuestions(lesson, "read"), [lesson]);
 
@@ -139,6 +157,12 @@ export function StudentApp() {
     return () => window.clearInterval(timer);
   }, [loadStudentAssignments, student]);
 
+  useEffect(() => {
+    if (!celebrationLesson) return;
+    const timer = window.setTimeout(() => setCelebrationLesson(null), 5000);
+    return () => window.clearTimeout(timer);
+  }, [celebrationLesson]);
+
   async function enterStudent(nextStudent: StudentSession) {
     saveStudentSession(nextStudent);
     setStudent(nextStudent);
@@ -188,7 +212,11 @@ export function StudentApp() {
   function completeSkill(skill: Skill) {
     if (!progress) return;
     const nextSkills = new Set([...(progress.completedSkills[lesson.id] || []), skill]);
+    const justCompletedLesson = nextSkills.size >= 4 && !progress.completedLessons.includes(lesson.id);
     mutateProgress((draft) => recordSkill(draft, lesson.id, skill));
+    if (justCompletedLesson) {
+      setCelebrationLesson(lesson);
+    }
     completeMatchingAssignments(lesson.id, skill, nextSkills.size >= 4);
   }
 
@@ -202,8 +230,8 @@ export function StudentApp() {
     mutateProgress((draft) => recordAnswer(draft, lesson.id, "read", `單字：${word}`, known, known ? "我會了" : "需要複習", word));
   }
 
-  function answerReview(label: string, skill: Skill, correct: boolean) {
-    mutateProgress((draft) => recordAnswer(draft, lesson.id, skill, label, correct));
+  function answerReview(label: string, skill: Skill, correct: boolean, reviewLessonId = lesson.id, answer = correct ? "我會了" : "再練一次", correctAnswer = "") {
+    mutateProgress((draft) => recordAnswer(draft, reviewLessonId, skill, label, correct, answer, correctAnswer));
   }
 
   function answerPractice(skill: Skill, label: string, correct: boolean, answer: string, correctAnswer: string) {
@@ -292,6 +320,7 @@ export function StudentApp() {
           </div>
           <div className="stat-row">
             <div className="stat"><strong>{progress.stars}</strong><small>星星</small></div>
+            <div className="stat"><strong>{progress.streak || 0}</strong><small>連續打卡</small></div>
             <div className="stat"><strong>{progress.completedLessons.length}</strong><small>完成故事</small></div>
             <div className="stat"><strong>{Object.keys(progress.mistakes).length}</strong><small>再挑戰</small></div>
           </div>
@@ -425,14 +454,15 @@ export function StudentApp() {
         )}
 
         {screen === "story" && <Story lesson={lesson} showZh={showZh} setShowZh={setShowZh} speed={speed} setSpeed={setSpeed} speak={speak} next={() => setScreen("vocab")} />}
-        {screen === "vocab" && <Vocabulary lesson={lesson} speak={speak} next={() => setScreen("listen")} onMark={markVocabulary} />}
+        {screen === "vocab" && <Vocabulary lesson={lesson} learnedWords={learnedWords} speak={speak} next={() => setScreen("listen")} onMark={markVocabulary} />}
         {screen === "listen" && <QuizTask key={`${lesson.id}-listen`} lesson={lesson} skill="listen" questions={listenQuestions} speak={speak} onAnswer={answerQuestion} onDone={() => { completeSkill("listen"); setScreen("speak"); }} />}
         {screen === "speak" && <SpeakTask lesson={lesson} speak={speak} onAnswer={answerPractice} onDone={() => { completeSkill("speak"); setScreen("read"); }} />}
         {screen === "read" && <QuizTask key={`${lesson.id}-read`} lesson={lesson} skill="read" questions={readQuestions} speak={speak} onAnswer={answerQuestion} onDone={() => { completeSkill("read"); setScreen("write"); }} />}
         {screen === "write" && <WriteTask lesson={lesson} onAnswer={answerPractice} onDone={() => { completeSkill("write"); setScreen("progress"); }} />}
-        {screen === "review" && <Review progress={progress} speak={speak} onAnswer={answerReview} />}
+        {screen === "review" && <Review progress={progress} lessons={allLessons} speak={speak} onAnswer={answerReview} />}
         {screen === "progress" && <Progress progress={progress} student={student} />}
       </main>
+      {celebrationLesson && <Celebration lesson={celebrationLesson} streak={progress.streak} onClose={() => setCelebrationLesson(null)} />}
     </div>
   );
 }
@@ -463,6 +493,38 @@ function getLessonUnlockState(item: Lesson, index: number, lessons: Lesson[], co
     reason: unlocked ? "已完成上一課，可以開始。" : `需先完成上一課：${previous.title}`,
     lockLabel: "先完成前一關"
   };
+}
+
+function sortCourseMapLessons(items: Lesson[]) {
+  return [...items].sort((a, b) => {
+    const sortDiff = (a.sortOrder || 999000) - (b.sortOrder || 999000);
+    if (sortDiff) return sortDiff;
+    const levelDiff = a.level - b.level;
+    if (levelDiff) return levelDiff;
+    return a.title.localeCompare(b.title);
+  });
+}
+
+function Celebration({ lesson, streak, onClose }: { lesson: Lesson; streak: number; onClose: () => void }) {
+  return (
+    <div className="celebration-backdrop" role="button" tabIndex={0} onClick={onClose} onKeyDown={onClose}>
+      <div className="celebration-card" onClick={(event) => event.stopPropagation()}>
+        <div className="confetti">
+          <span>★</span><span>●</span><span>◆</span><span>✦</span><span>●</span><span>★</span>
+        </div>
+        <div className="celebration-mascot">
+          <span className="mascot-face">{lesson.cover}</span>
+          <span className="sparkle sparkle-a">⭐</span>
+          <span className="sparkle sparkle-b">🎉</span>
+          <span className="sparkle sparkle-c">🌈</span>
+        </div>
+        <p className="eyebrow">Mission Complete</p>
+        <h3>完成「{lesson.title}」！</h3>
+        <p className="muted">今天已完成打卡。連續學習 {streak || 1} 天，繼續保持！</p>
+        <button className="btn primary" onClick={onClose}>太棒了，繼續學習</button>
+      </div>
+    </div>
+  );
 }
 
 function buildLessonPracticeQuestions(lesson: Lesson, skill: "listen" | "read"): ChoiceQuestion[] {
@@ -824,8 +886,9 @@ function Story({ lesson, showZh, setShowZh, speed, setSpeed, speak, next }: {
   );
 }
 
-function Vocabulary({ lesson, speak, next, onMark }: {
+function Vocabulary({ lesson, learnedWords, speak, next, onMark }: {
   lesson: Lesson;
+  learnedWords: (Word & { lessonTitle: string; lessonId: string })[];
   speak: (text: string) => void;
   next: () => void;
   onMark: (word: string, known: boolean) => void;
@@ -870,6 +933,26 @@ function Vocabulary({ lesson, speak, next, onMark }: {
           </article>
         ))}
       </div>
+      {learnedWords.length > 0 && (
+        <>
+          <div className="section-title">
+            <div>
+              <h3>我的單詞收藏冊</h3>
+              <p className="muted">只顯示你之前做過的單元單字，還沒學過的單元不會出現在這裡。</p>
+            </div>
+            <span className="pill blue">{learnedWords.length} 個已學單字</span>
+          </div>
+          <div className="word-bank">
+            {learnedWords.map((item) => (
+              <button className="word-chip" key={`${item.lessonId}-${item.word}`} onClick={() => speak(item.word)}>
+                <span>{item.image}</span>
+                <strong>{item.word}</strong>
+                <small>{item.meaning} · {item.lessonTitle}</small>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </section>
   );
 }
@@ -1047,7 +1130,7 @@ function WriteTask({ lesson, onAnswer, onDone }: {
           <div className="task-card" key={task.id}>
             <p className="eyebrow">{task.prompt}</p>
             <h3>{task.starter}</h3>
-            <p className="muted">提示：{friendlyWritingHint(task.answerHint)}</p>
+            <p className="muted">提示：{friendlyWritingHint(task, lesson)}</p>
             <div className="field">
               <textarea rows={3} placeholder="在這裡寫英文句子，不用怕錯，提交後會看到正確答案。" value={answers[task.id] || ""} onChange={(event) => setAnswers({ ...answers, [task.id]: event.target.value })} />
             </div>
@@ -1070,18 +1153,29 @@ function WriteTask({ lesson, onAnswer, onDone }: {
         <button className="btn primary full" disabled={!complete} onClick={onDone}>完成寫作任務</button>
       </article>
       <aside className="panel">
-        <h3>AI 寫作小幫手</h3>
-        <p className="muted">MVP 先儲存學生輸入，第二階段可加入 AI 批改與鼓勵式修正。</p>
+        <h3>寫作小幫手</h3>
+        <p className="muted">先看空格前後的字，再從本課單字挑可能合適的詞。這裡只給線索，不直接給答案。</p>
+        <div className="hint-board">
+          {lesson.words.slice(0, 6).map((word) => (
+            <span key={word.word}>{word.image} {word.part}</span>
+          ))}
+        </div>
       </aside>
     </section>
   );
 }
 
-function friendlyWritingHint(hint: string) {
-  const answers = hint.split("/").map((item) => item.trim()).filter(Boolean);
-  if (!answers.length) return "先看句子前後文，再回想故事裡出現過的人物、物品或動作。";
-  if (answers.length > 1) return "這題可能有不只一個合理答案。先判斷空格需要名詞、動詞還是形容詞，再選最符合故事的字。";
-  return "先觀察空格前後的字，想想這裡需要填人物、物品、動作或感覺，再回到本單元單字卡找線索。";
+function friendlyWritingHint(task: { starter: string; answerHint: string }, lesson: Lesson) {
+  const beforeBlank = task.starter.split("____")[0] || task.starter;
+  const afterBlank = task.starter.split("____")[1] || "";
+  const possibleParts = lesson.words
+    .filter((word) => task.answerHint.toLowerCase().includes(word.word.toLowerCase()))
+    .map((word) => word.part);
+  const partHint = possibleParts.length ? `這裡可能需要 ${Array.from(new Set(possibleParts)).join(" / ")}。` : "先判斷這裡要填人物、物品、動作還是感覺。";
+  const contextHint = beforeBlank || afterBlank
+    ? `留意空格附近的字：「${beforeBlank.trim().slice(-18)} ____ ${afterBlank.trim().slice(0, 18)}」。`
+    : "先看完整句子的意思，再選最自然的字。";
+  return `${contextHint} ${partHint} 不確定時，可以先用本課單字造一個合理句子。`;
 }
 
 function isWritingCorrect(answer: string, correctAnswer: string) {
@@ -1093,40 +1187,57 @@ function isWritingCorrect(answer: string, correctAnswer: string) {
   });
 }
 
-function findReviewContext(label: string): { word?: Word; question?: ChoiceQuestion; lesson?: Lesson } {
+function findReviewContext(label: string, lessons: Lesson[]): { word?: Word; question?: ChoiceQuestion; writing?: WritingTask; lesson?: Lesson } {
   const wordLabel = label.replace(/^單字：/, "");
-  for (const lesson of appLessons) {
+  for (const lesson of lessons) {
     const word = lesson.words.find((item) => item.word === wordLabel);
     if (word) return { word, lesson };
 
-    const question = [...lesson.listen, ...lesson.read].find((item) => item.prompt === label);
+    const generatedQuestions = [...buildLessonPracticeQuestions(lesson, "listen"), ...buildLessonPracticeQuestions(lesson, "read")];
+    const question = [...lesson.listen, ...lesson.read, ...generatedQuestions].find((item) => item.prompt === label);
     if (question) return { question, lesson };
+
+    const writing = lesson.write.find((item) => `${item.prompt}：${item.starter}` === label);
+    if (writing) return { writing, lesson };
   }
   return {};
 }
 
-function Review({ progress, speak, onAnswer }: {
+function Review({ progress, lessons, speak, onAnswer }: {
   progress: StudentProgress;
+  lessons: Lesson[];
   speak: (text: string) => void;
-  onAnswer: (label: string, skill: Skill, correct: boolean) => void;
+  onAnswer: (label: string, skill: Skill, correct: boolean, lessonId?: string, answer?: string, correctAnswer?: string) => void;
 }) {
   const items = Object.values(progress.mistakes);
   const [filter, setFilter] = useState<"all" | "due" | "later">("all");
   const [picked, setPicked] = useState<Record<string, string>>({});
+  const [written, setWritten] = useState<Record<string, string>>({});
   const [feedback, setFeedback] = useState<Record<string, string>>({});
   const today = new Date().toISOString().slice(0, 10);
   const dueItems = items.filter((item) => item.nextReview <= today);
   const laterItems = items.filter((item) => item.nextReview > today);
   const visibleItems = filter === "due" ? dueItems : filter === "later" ? laterItems : items;
 
-  function choose(item: { label: string; skill: Skill }, question: ChoiceQuestion, answer: string) {
+  function choose(item: { label: string; skill: Skill }, question: ChoiceQuestion, answer: string, reviewLessonId?: string) {
     const correct = answer === question.answer;
     setPicked((current) => ({ ...current, [item.label]: answer }));
     setFeedback((current) => ({
       ...current,
       [item.label]: correct ? "答對了！這題會慢慢從再挑戰中移除。" : `再練一次，正確答案是 ${question.answer}。`
     }));
-    onAnswer(item.label, item.skill, correct);
+    onAnswer(item.label, item.skill, correct, reviewLessonId, answer, question.answer);
+  }
+
+  function submitWriting(item: { label: string; skill: Skill }, lesson: Lesson | undefined, task: WritingTask) {
+    const answer = written[item.label] || "";
+    const correctAnswer = task.answerHint.trim();
+    const correct = isWritingCorrect(answer, correctAnswer);
+    setFeedback((current) => ({
+      ...current,
+      [item.label]: correct ? "寫得不錯，這題已重新記錄為答對。" : `還差一點，正確答案參考：${correctAnswer}。`
+    }));
+    onAnswer(item.label, item.skill, correct, lesson?.id, answer, correctAnswer);
   }
 
   return (
@@ -1145,7 +1256,7 @@ function Review({ progress, speak, onAnswer }: {
       </div>
       <div className="grid cards">
         {visibleItems.length ? visibleItems.map((item) => {
-          const context = findReviewContext(item.label);
+          const context = findReviewContext(item.label, lessons);
           const selected = picked[item.label];
           return (
             <article className="card review-card" key={item.label}>
@@ -1176,12 +1287,28 @@ function Review({ progress, speak, onAnswer }: {
                         <button
                           key={option}
                           className={`option ${selected && option === context.question?.answer ? "correct" : ""} ${selected === option && option !== context.question?.answer ? "wrong" : ""}`}
-                          onClick={() => choose(item, context.question as ChoiceQuestion, option)}
+                          onClick={() => choose(item, context.question as ChoiceQuestion, option, context.lesson?.id)}
                         >
                           {option}
                         </button>
                       ))}
                     </div>
+                  </>
+                ) : context.writing ? (
+                  <>
+                    <p className="eyebrow">寫作重練</p>
+                    <h3>{context.writing.starter}</h3>
+                    <p className="muted">提示：{context.lesson ? friendlyWritingHint(context.writing, context.lesson) : "先看空格前後文，再選最自然的字。"}</p>
+                    <textarea
+                      rows={3}
+                      className="review-textarea"
+                      placeholder="重新寫一次答案"
+                      value={written[item.label] || ""}
+                      onChange={(event) => setWritten((current) => ({ ...current, [item.label]: event.target.value }))}
+                    />
+                    <button className="btn secondary" disabled={!written[item.label]?.trim()} onClick={() => submitWriting(item, context.lesson, context.writing as WritingTask)}>
+                      提交重練答案
+                    </button>
                   </>
                 ) : (
                   <>
@@ -1197,8 +1324,8 @@ function Review({ progress, speak, onAnswer }: {
 
               <div className="btns review-actions">
                 {context.word && <button className="btn secondary" onClick={() => speak(context.word?.word || item.label)}>發音</button>}
-                <button className="btn ghost" onClick={() => onAnswer(item.label, item.skill, true)}>我會了</button>
-                <button className="btn ghost" onClick={() => onAnswer(item.label, item.skill, false)}>再練一次</button>
+                <button className="btn ghost" onClick={() => onAnswer(item.label, item.skill, true, context.lesson?.id)}>我會了</button>
+                <button className="btn ghost" onClick={() => onAnswer(item.label, item.skill, false, context.lesson?.id)}>再練一次</button>
               </div>
             </article>
           );

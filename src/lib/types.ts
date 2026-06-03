@@ -65,6 +65,8 @@ export type Lesson = {
 export type StudentProgress = {
   stars: number;
   streak: number;
+  lastCheckInDate?: string;
+  attendanceDates?: string[];
   completedLessons: string[];
   completedSkills: Record<string, Skill[]>;
   mistakes: Record<string, { label: string; skill: Skill; count: number; nextReview: string }>;

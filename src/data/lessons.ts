@@ -873,7 +873,9 @@ const difficultyOrder = { beginner: 1, intermediate: 2, advanced: 3 };
 export const appLessons = lessons
   .map((lesson, index) => ({ ...normalizedLesson(lesson), sortOrder: lesson.sortOrder ?? (index + 1) * 1000 }))
   .sort((a, b) => {
+    const sortDiff = (a.sortOrder || 0) - (b.sortOrder || 0);
+    if (sortDiff) return sortDiff;
     const difficultyDiff = difficultyOrder[lessonDifficulty(a)] - difficultyOrder[lessonDifficulty(b)];
     if (difficultyDiff) return difficultyDiff;
-    return (a.sortOrder || 0) - (b.sortOrder || 0);
+    return a.title.localeCompare(b.title);
   });

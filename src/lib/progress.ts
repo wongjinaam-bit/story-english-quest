@@ -7,6 +7,8 @@ function emptyProgress(): StudentProgress {
   return {
     stars: 0,
     streak: 0,
+    lastCheckInDate: "",
+    attendanceDates: [],
     completedLessons: [],
     completedSkills: {},
     mistakes: {},
@@ -108,6 +110,7 @@ export function recordSkill(progress: StudentProgress, lessonId: string, skill: 
   const skills = new Set(progress.completedSkills[lessonId] || []);
   skills.add(skill);
   progress.completedSkills[lessonId] = Array.from(skills);
+  recordDailyCheckIn(progress);
   if (skills.size >= 4 && !progress.completedLessons.includes(lessonId)) {
     progress.completedLessons.push(lessonId);
     const lessonAnswers = progress.answers.filter((item) => item.lessonId === lessonId);
@@ -159,5 +162,26 @@ function updateBadges(progress: StudentProgress) {
   if (progress.completedLessons.length >= 1) badges.add("Story Starter 故事新手");
   if (progress.completedLessons.length >= 3) badges.add("Quest Explorer 任務探險家");
   if (progress.stars >= 50) badges.add("Star Collector 星星收藏家");
+  if ((progress.attendanceDates || []).length >= 3) badges.add("Check-in Champ 打卡達人");
   progress.badges = Array.from(badges);
+}
+
+function recordDailyCheckIn(progress: StudentProgress) {
+  const today = new Date().toISOString().slice(0, 10);
+  const dates = new Set(progress.attendanceDates || []);
+  dates.add(today);
+  progress.lastCheckInDate = today;
+  progress.attendanceDates = Array.from(dates).sort();
+  progress.streak = calculateStreak(progress.attendanceDates);
+}
+
+function calculateStreak(dates: string[]) {
+  const dateSet = new Set(dates);
+  let streak = 0;
+  const cursor = new Date();
+  while (dateSet.has(cursor.toISOString().slice(0, 10))) {
+    streak += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
 }
