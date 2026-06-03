@@ -5,7 +5,7 @@ import { Headphones, LogOut, Mic, QrCode, Sparkles, Star, UserRound } from "luci
 import { appLessons } from "@/data/lessons";
 import { isSupabaseReady, signInStudent, signOut, signUpStudent } from "@/lib/auth";
 import { mergePublishedLessons } from "@/lib/course-drafts";
-import { canStudentSeeLesson, defaultLearningLevel, learningLevelDescriptions, learningLevelLabels, lessonDifficulty } from "@/lib/learning-levels";
+import { defaultLearningLevel, learningLevelDescriptions, learningLevelLabels, lessonDifficulty } from "@/lib/learning-levels";
 import { supabase } from "@/lib/supabase";
 import {
   clearStudentSession,
@@ -19,7 +19,7 @@ import {
 } from "@/lib/progress";
 import type { AppAssignment, ChoiceQuestion, CourseDraft, LearningLevel, Lesson, Skill, StudentProgress, StudentSession, Word, WritingTask } from "@/lib/types";
 
-type Screen = "home" | "map" | "story" | "vocab" | "listen" | "speak" | "read" | "write" | "review" | "progress";
+type Screen = "home" | "map" | "story" | "questVocab" | "vocab" | "listen" | "speak" | "read" | "write" | "review" | "progress";
 
 type QuizTaskState = {
   index: number;
@@ -64,10 +64,10 @@ type StudentTaskDraft = {
   currentLessonScreens: Record<string, Screen>;
 };
 
-const taskScreens = new Set<Screen>(["story", "vocab", "listen", "speak", "read", "write"]);
+const taskScreens = new Set<Screen>(["story", "questVocab", "listen", "speak", "read", "write"]);
 const taskScreenRank: Partial<Record<Screen, number>> = {
   story: 1,
-  vocab: 2,
+  questVocab: 2,
   listen: 3,
   speak: 4,
   read: 5,
@@ -91,7 +91,7 @@ const navItems: { id: Screen; label: string; icon: string; cuteLabel: string }[]
 
 const skillQuestSteps: { skill?: Skill; label: string; icon: string; screen: Screen }[] = [
   { label: "故事", icon: "📖", screen: "story" },
-  { label: "單字", icon: "🔤", screen: "vocab" },
+  { label: "單字", icon: "🔤", screen: "questVocab" },
   { skill: "listen", label: "聽力", icon: "🎧", screen: "listen" },
   { skill: "speak", label: "口說", icon: "🎙️", screen: "speak" },
   { skill: "read", label: "閱讀", icon: "📚", screen: "read" },
@@ -103,6 +103,18 @@ const skillLabels: Record<Skill, string> = {
   speak: "說",
   read: "讀",
   write: "寫"
+};
+
+const levelToWorld: Record<LearningLevel, 1 | 2 | 3> = {
+  beginner: 1,
+  intermediate: 2,
+  advanced: 3
+};
+
+const learningLevelRank: Record<LearningLevel, number> = {
+  beginner: 1,
+  intermediate: 2,
+  advanced: 3
 };
 
 const avatars = ["⭐", "🚀", "🌈", "📚", "🎯", "🏆"];
@@ -126,7 +138,15 @@ function taskDraftKey(studentId: string) {
 function loadTaskDraft(studentId: string): StudentTaskDraft {
   if (typeof window === "undefined") return emptyTaskDraft();
   try {
-    return { ...emptyTaskDraft(), ...JSON.parse(localStorage.getItem(taskDraftKey(studentId)) || "{}") };
+    const draft = { ...emptyTaskDraft(), ...JSON.parse(localStorage.getItem(taskDraftKey(studentId)) || "{}") };
+    if (draft.screen === "vocab") draft.screen = "questVocab";
+    draft.currentLessonScreens = Object.fromEntries(
+      Object.entries(draft.currentLessonScreens || {}).map(([lessonId, savedScreen]) => [
+        lessonId,
+        savedScreen === "vocab" ? "questVocab" : savedScreen
+      ])
+    ) as Record<string, Screen>;
+    return draft;
   } catch {
     return emptyTaskDraft();
   }
@@ -158,13 +178,29 @@ export function StudentApp() {
   const [owlHelp, setOwlHelp] = useState<OwlHelp | null>(null);
   const [lockedHint, setLockedHint] = useState<{ id: string; message: string } | null>(null);
   const [mapWorldLevel, setMapWorldLevel] = useState<1 | 2 | 3>(1);
+  const [pendingNavigation, setPendingNavigation] = useState<Screen | null>(null);
+  const studentLearningLevel = defaultLearningLevel(student?.proficiencyLevel);
   const lessons = useMemo(() => {
     if (!student) return allLessons;
-    const level = defaultLearningLevel(student.proficiencyLevel);
     const assignedIds = new Set(assignments.map((assignment) => assignment.lesson_id));
-    return sortCourseMapLessons(allLessons.filter((item) => canStudentSeeLesson(level, item, assignedIds.has(item.id))));
-  }, [allLessons, assignments, student]);
-  const lesson = useMemo(() => lessons.find((item) => item.id === lessonId) || lessons[0] || appLessons[0], [lessonId, lessons]);
+    const completedIds = new Set(progress?.completedLessons || []);
+    const levelComplete = (level: LearningLevel) => {
+      const levelLessons = allLessons.filter((item) => lessonDifficulty(item) === level);
+      return levelLessons.length > 0 && levelLessons.every((item) => completedIds.has(item.id));
+    };
+    let visibleRank = learningLevelRank[studentLearningLevel];
+    if (levelComplete("beginner")) visibleRank = Math.max(visibleRank, learningLevelRank.intermediate);
+    if (levelComplete("intermediate")) visibleRank = Math.max(visibleRank, learningLevelRank.advanced);
+    return sortCourseMapLessons(allLessons.filter((item) => {
+      if (assignedIds.has(item.id)) return true;
+      return learningLevelRank[lessonDifficulty(item)] <= visibleRank;
+    }));
+  }, [allLessons, assignments, progress?.completedLessons, student, studentLearningLevel]);
+  const preferredStartLesson = useMemo(
+    () => lessons.find((item) => lessonDifficulty(item) === studentLearningLevel) || lessons[0] || appLessons[0],
+    [lessons, studentLearningLevel]
+  );
+  const lesson = useMemo(() => lessons.find((item) => item.id === lessonId) || preferredStartLesson, [lessonId, lessons, preferredStartLesson]);
   const practicedLessonIds = useMemo(() => new Set([
     ...(progress?.completedLessons || []),
     ...Object.keys(progress?.completedSkills || {}),
@@ -202,10 +238,29 @@ export function StudentApp() {
   }, []);
 
   useEffect(() => {
-    if (lessons.length && !lessons.some((item) => item.id === lessonId)) {
-      setLessonId(lessons[0].id);
+    setMapWorldLevel(levelToWorld[studentLearningLevel]);
+  }, [studentLearningLevel]);
+
+  useEffect(() => {
+    if (!lessons.length || !taskDraftReady || !progress) return;
+    const currentLesson = lessons.find((item) => item.id === lessonId);
+    if (!currentLesson) {
+      setLessonId(preferredStartLesson.id);
+      return;
     }
-  }, [lessonId, lessons]);
+    const hasLearningHistory =
+      progress.completedLessons.length > 0 ||
+      Object.keys(progress.completedSkills).length > 0 ||
+      progress.answers.length > 0;
+    if (
+      !hasLearningHistory &&
+      !taskScreens.has(screen) &&
+      lessonDifficulty(currentLesson) !== studentLearningLevel &&
+      preferredStartLesson.id !== lessonId
+    ) {
+      setLessonId(preferredStartLesson.id);
+    }
+  }, [lessonId, lessons, preferredStartLesson, progress, screen, studentLearningLevel, taskDraftReady]);
 
   const loadStudentAssignments = useCallback(async () => {
     if (!student || student.mode !== "supabase" || !supabase) {
@@ -330,9 +385,14 @@ export function StudentApp() {
   const activeStudent = student;
   const lessonSkills = progress.completedSkills[lesson.id] || [];
   const nextSkill = (["listen", "speak", "read", "write"] as Skill[]).find((skill) => !lessonSkills.includes(skill));
-  const activeMapLessonId = lessons.find((item, index) => {
+  const questActive = taskScreens.has(screen) && !progress.completedLessons.includes(lesson.id);
+  const preferredMapLessons = [
+    ...lessons.filter((item) => lessonDifficulty(item) === studentLearningLevel),
+    ...lessons.filter((item) => lessonDifficulty(item) !== studentLearningLevel)
+  ];
+  const activeMapLessonId = preferredMapLessons.find((item) => {
     const assigned = assignments.some((assignment) => assignment.lesson_id === item.id);
-    const unlockState = getLessonUnlockState(item, index, lessons, progress.completedLessons, assigned);
+    const unlockState = getLessonUnlockState(item, lessons, progress.completedLessons, assigned, studentLearningLevel);
     return unlockState.unlocked && !progress.completedLessons.includes(item.id);
   })?.id || lesson.id;
   const recommendedScreen: Screen = resumeScreenForLesson(lesson.id);
@@ -433,7 +493,7 @@ export function StudentApp() {
   }
 
   function resumeScreenForLesson(targetLessonId: string): Screen {
-    const savedScreen = currentLessonScreens[targetLessonId];
+    const savedScreen = currentLessonScreens[targetLessonId] === "vocab" ? "questVocab" : currentLessonScreens[targetLessonId];
     if (savedScreen && taskScreens.has(savedScreen)) return savedScreen;
     const savedSkills = progress?.completedSkills[targetLessonId] || [];
     if (!savedSkills.length) return "story";
@@ -442,7 +502,7 @@ export function StudentApp() {
   }
 
   function nextWithoutRegressing(targetLessonId: string, targetScreen: Screen): Screen {
-    const savedScreen = currentLessonScreens[targetLessonId];
+    const savedScreen = currentLessonScreens[targetLessonId] === "vocab" ? "questVocab" : currentLessonScreens[targetLessonId];
     const savedRank = taskScreenRank[savedScreen] || 0;
     const targetRank = taskScreenRank[targetScreen] || 0;
     return savedRank > targetRank ? savedScreen : targetScreen;
@@ -456,6 +516,24 @@ export function StudentApp() {
   function showLockedLessonHint(targetLessonId: string, message: string) {
     setLockedHint(null);
     window.setTimeout(() => setLockedHint({ id: targetLessonId, message }), 0);
+  }
+
+  function requestNavigation(targetScreen: Screen) {
+    if (targetScreen === screen) return;
+    const nextScreen = targetScreen === "story" ? resumeScreenForLesson(lesson.id) : targetScreen;
+    if (nextScreen === screen) return;
+    if (questActive) {
+      setPendingNavigation(nextScreen);
+      return;
+    }
+    setScreen(nextScreen);
+  }
+
+  function confirmNavigationAway() {
+    if (pendingNavigation) {
+      setScreen(pendingNavigation);
+    }
+    setPendingNavigation(null);
   }
 
   async function startAssignment(assignment: AppAssignment) {
@@ -504,7 +582,7 @@ export function StudentApp() {
 
         <nav className="nav">
           {navItems.map((item) => (
-            <button key={item.id} className={screen === item.id ? "active" : ""} onClick={() => setScreen(item.id)}>
+            <button key={item.id} className={screen === item.id || (item.id === "story" && taskScreens.has(screen)) ? "active" : ""} onClick={() => requestNavigation(item.id)}>
               <span className="nav-icon">{item.icon}</span>
               <span className="nav-copy">
                 <strong>{item.label}{item.id === "home" && assignments.length ? `（${assignments.length}）` : ""}</strong>
@@ -556,7 +634,7 @@ export function StudentApp() {
             <p>你有 {assignments.length} 個任務待完成。老師指定的課程會優先開放，即使課程地圖原本還未解鎖也可以開始。</p>
             <div className="btns">
               <button className="btn primary" type="button" onClick={() => startAssignment(assignments[0])}>開始最新任務</button>
-              <button className="btn secondary" type="button" onClick={() => setScreen("home")}>查看全部任務</button>
+              <button className="btn secondary" type="button" onClick={() => requestNavigation("home")}>查看全部任務</button>
             </div>
           </div>
         )}
@@ -695,10 +773,9 @@ export function StudentApp() {
                   </div>
                   <div className="world-route">
                     {worldLessons.map((item, worldIndex) => {
-                      const globalIndex = lessons.findIndex((lessonItem) => lessonItem.id === item.id);
                       const completed = progress.completedLessons.includes(item.id);
                       const assigned = assignments.some((assignment) => assignment.lesson_id === item.id);
-                      const unlockState = getLessonUnlockState(item, globalIndex, lessons, progress.completedLessons, assigned);
+                      const unlockState = getLessonUnlockState(item, lessons, progress.completedLessons, assigned, studentLearningLevel);
                       const active = unlockState.unlocked && !completed && item.id === activeMapLessonId;
                       const routePosition = ["left", "mid", "right", "mid", "left"][worldIndex % 5];
                       const nodeClass = [
@@ -747,8 +824,9 @@ export function StudentApp() {
           </section>
         )}
 
-        {screen === "story" && <Story lesson={lesson} showZh={showZh} setShowZh={setShowZh} speed={speed} setSpeed={setSpeed} speak={speak} next={() => setScreen(nextWithoutRegressing(lesson.id, "vocab"))} />}
-        {screen === "vocab" && <Vocabulary lesson={lesson} learnedWords={learnedWords} speak={speak} next={() => setScreen("listen")} onMark={markVocabulary} />}
+        {screen === "story" && <Story lesson={lesson} showZh={showZh} setShowZh={setShowZh} speed={speed} setSpeed={setSpeed} speak={speak} next={() => setScreen(nextWithoutRegressing(lesson.id, "questVocab"))} />}
+        {screen === "questVocab" && <Vocabulary lesson={lesson} learnedWords={learnedWords} speak={speak} questMode next={() => setScreen("listen")} onMark={markVocabulary} />}
+        {screen === "vocab" && <Vocabulary lesson={lesson} learnedWords={learnedWords} speak={speak} />}
         {screen === "listen" && <QuizTask key={`${lesson.id}-listen`} lesson={lesson} skill="listen" questions={listenQuestions} speak={speak} state={quizStateFor("listen")} onStateChange={(nextState) => updateQuizState("listen", nextState)} helpUsed={hasUsedHelp("listen")} onHelp={(question) => showOwlHelp("listen", question.answer, `這題可以聽關鍵字：${question.audio || question.prompt}`)} onAnswer={answerQuestion} onDone={() => { completeSkill("listen"); setScreen("speak"); }} />}
         {screen === "speak" && <SpeakTask lesson={lesson} speak={speak} state={speakStateFor()} onStateChange={updateSpeakState} helpUsed={hasUsedHelp("speak")} onHelp={(answer) => showOwlHelp("speak", answer, "先聽一次，再跟著 Owl 老師慢慢讀。")} onAnswer={answerPractice} onDone={() => { completeSkill("speak"); setScreen("read"); }} />}
         {screen === "read" && <QuizTask key={`${lesson.id}-read`} lesson={lesson} skill="read" questions={readQuestions} speak={speak} state={quizStateFor("read")} onStateChange={(nextState) => updateQuizState("read", nextState)} helpUsed={hasUsedHelp("read")} onHelp={(question) => showOwlHelp("read", question.answer, "閱讀時先找題目中的關鍵字，再回故事找相同或相近的意思。")} onAnswer={answerQuestion} onDone={() => { completeSkill("read"); setScreen("write"); }} />}
@@ -758,18 +836,26 @@ export function StudentApp() {
       </main>
       {celebrationLesson && <Celebration lesson={celebrationLesson} streak={progress.streak} onClose={() => setCelebrationLesson(null)} />}
       {owlHelp && <OwlHelpDialog help={owlHelp} onClose={() => setOwlHelp(null)} />}
+      {pendingNavigation && (
+        <QuestLeavePrompt
+          currentScreen={screen}
+          lessonTitle={lesson.title}
+          onCancel={() => setPendingNavigation(null)}
+          onLeave={confirmNavigationAway}
+        />
+      )}
     </div>
   );
 }
 
-function getLessonUnlockState(item: Lesson, index: number, lessons: Lesson[], completedLessons: string[], assigned = false) {
+function getLessonUnlockState(item: Lesson, lessons: Lesson[], completedLessons: string[], assigned = false, studentLevel: LearningLevel = "beginner") {
   if (completedLessons.includes(item.id)) {
     return { unlocked: true, reason: "你已完成這一課。", lockLabel: "已完成" };
   }
   if (assigned) {
     return { unlocked: true, reason: "老師已指定這個任務，所以可以直接開始。", lockLabel: "開始老師任務" };
   }
-  if (item.unlockMode === "open" || index === 0) {
+  if (item.unlockMode === "open") {
     return { unlocked: true, reason: "老師設定為立即開放。", lockLabel: "可開始" };
   }
   if (item.unlockMode === "specific" && item.prerequisiteLessonId) {
@@ -781,13 +867,59 @@ function getLessonUnlockState(item: Lesson, index: number, lessons: Lesson[], co
       lockLabel: `先完成：${prerequisite?.title || "指定課程"}`
     };
   }
-  const previous = lessons[index - 1];
+  const itemDifficulty = lessonDifficulty(item);
+  const sameLevelLessons = lessons.filter((lesson) => lessonDifficulty(lesson) === itemDifficulty);
+  const sameLevelIndex = sameLevelLessons.findIndex((lesson) => lesson.id === item.id);
+  if (sameLevelIndex <= 0) {
+    const isOwnLevelStart = itemDifficulty === studentLevel;
+    return {
+      unlocked: true,
+      reason: isOwnLevelStart ? "這是你目前程度的第一關，可以直接開始。" : "這是這個程度的第一關，可以直接開始。",
+      lockLabel: "可開始"
+    };
+  }
+  const previous = sameLevelLessons[sameLevelIndex - 1];
   const unlocked = !previous || completedLessons.includes(previous.id);
   return {
     unlocked,
     reason: unlocked ? "已完成上一課，可以開始。" : `需先完成上一課：${previous.title}`,
     lockLabel: "先完成前一關"
   };
+}
+
+function QuestLeavePrompt({ currentScreen, lessonTitle, onCancel, onLeave }: {
+  currentScreen: Screen;
+  lessonTitle: string;
+  onCancel: () => void;
+  onLeave: () => void;
+}) {
+  return (
+    <div className="quest-guard-backdrop" role="dialog" aria-modal="true" aria-label="任務進行中提醒" onClick={onCancel}>
+      <article className="quest-guard-card" onClick={(event) => event.stopPropagation()}>
+        <div className="owl-help-teacher">
+          <OwlMark />
+          <div>
+            <strong>Owl 老師提醒你</strong>
+            <small>{lessonTitle} 正在進行中</small>
+          </div>
+        </div>
+        <div className="quest-guard-bubble">
+          <span>⚠️</span>
+          <div>
+            <h3>任務還在進行中喔！</h3>
+            <p>
+              你現在正在「{titleFor(currentScreen)}」。如果只是誤觸左邊選單，建議先繼續挑戰。
+              系統已經幫你保存目前位置，真的要離開也可以之後再回來。
+            </p>
+          </div>
+        </div>
+        <div className="btns">
+          <button className="btn primary adventure-btn" type="button" onClick={onCancel}>繼續挑戰</button>
+          <button className="btn secondary adventure-btn" type="button" onClick={onLeave}>先離開</button>
+        </div>
+      </article>
+    </div>
+  );
 }
 
 function sortCourseMapLessons(items: Lesson[]) {
@@ -1194,6 +1326,7 @@ function titleFor(screen: Screen) {
     home: "今日故事任務",
     map: "課程地圖",
     story: "故事頁",
+    questVocab: "故事單字任務",
     vocab: "單字學習",
     listen: "聽力任務",
     speak: "口說任務",
@@ -1262,12 +1395,13 @@ function Story({ lesson, showZh, setShowZh, speed, setSpeed, speak, next }: {
   );
 }
 
-function Vocabulary({ lesson, learnedWords, speak, next, onMark }: {
+function Vocabulary({ lesson, learnedWords, speak, questMode = false, next, onMark }: {
   lesson: Lesson;
   learnedWords: (Word & { lessonTitle: string; lessonId: string })[];
   speak: (text: string) => void;
-  next: () => void;
-  onMark: (word: string, known: boolean) => void;
+  questMode?: boolean;
+  next?: () => void;
+  onMark?: (word: string, known: boolean) => void;
 }) {
   const [marked, setMarked] = useState<Record<string, "known" | "review">>({});
   const [heard, setHeard] = useState<Record<string, boolean>>({});
@@ -1277,15 +1411,19 @@ function Vocabulary({ lesson, learnedWords, speak, next, onMark }: {
   function mark(word: string, value: "known" | "review") {
     if (!heard[word]) return;
     setMarked((current) => ({ ...current, [word]: value }));
-    onMark(word, value === "known");
+    onMark?.(word, value === "known");
   }
 
   return (
     <section>
       <div className="section-title">
         <div>
-          <h3>{lesson.cover} {lesson.title} 單字任務</h3>
-          <p className="muted">這裡只顯示你最近一次正在冒險的單元單字。請先聽發音，再選「我會了」或「需要複習」。</p>
+          <h3>{lesson.cover} {lesson.title} {questMode ? "單字任務" : "正在學習的單字"}</h3>
+          <p className="muted">
+            {questMode
+              ? "這是故事冒險中的單字任務。請先聽發音，再選「我會了」或「需要複習」，完成後繼續聽說讀寫。"
+              : "這裡只用來查看目前正在學習單元的單字，不會推進或重置故事冒險進度。"}
+          </p>
         </div>
         <div className="admin-actions">
           <span className={allReady ? "pill" : "pill blue"}>{allReady ? "本單元單字已完成" : "正在學習中"}</span>
@@ -1316,16 +1454,18 @@ function Vocabulary({ lesson, learnedWords, speak, next, onMark }: {
         ))}
       </div>
 
-      <article className="panel vocab-next-panel">
-        <div>
-          <span className={allReady ? "pill" : "pill blue"}>{allReady ? "單字任務完成" : "先完成本課單字"}</span>
-          <h3>下一站：聽力任務</h3>
-          <p className="muted">完成本單元所有單字後，就可以聽 Owl 老師出題，繼續這一關的冒險。</p>
-        </div>
-        <button className="btn primary adventure-btn" disabled={!allReady} type="button" onClick={next}>
-          開始聽力任務
-        </button>
-      </article>
+      {questMode && next && (
+        <article className="panel vocab-next-panel">
+          <div>
+            <span className={allReady ? "pill" : "pill blue"}>{allReady ? "單字任務完成" : "先完成本課單字"}</span>
+            <h3>下一站：聽力任務</h3>
+            <p className="muted">完成本單元所有單字後，就可以聽 Owl 老師出題，繼續這一關的冒險。</p>
+          </div>
+          <button className="btn primary adventure-btn" disabled={!allReady} type="button" onClick={next}>
+            開始聽力任務
+          </button>
+        </article>
+      )}
 
       {showWordBank && (
         <div className="word-bank-backdrop" role="dialog" aria-modal="true" aria-label="我的單詞收藏冊" onClick={() => setShowWordBank(false)}>

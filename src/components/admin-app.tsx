@@ -188,6 +188,13 @@ export function AdminApp() {
             supabaseReady={supabaseReady}
             selectedStudentId={selectedStudentId}
             onSelectStudent={setSelectedStudentId}
+            onStudentLevelChanged={(studentId, level) => {
+              setStudents((current) => current.map((row) => (
+                row.profile.id === studentId
+                  ? { ...row, profile: { ...row.profile, proficiency_level: level } }
+                  : row
+              )));
+            }}
           />
         )}
         {tab === "assignments" && <Assignments students={students} teacher={profile} supabaseReady={supabaseReady} />}
@@ -300,13 +307,15 @@ function Students({
   loading,
   supabaseReady,
   selectedStudentId,
-  onSelectStudent
+  onSelectStudent,
+  onStudentLevelChanged
 }: {
   students: StudentRow[];
   loading: boolean;
   supabaseReady: boolean;
   selectedStudentId: string | null;
   onSelectStudent: (id: string | null) => void;
+  onStudentLevelChanged: (studentId: string, level: LearningLevel) => void;
 }) {
   const [teacherReportLessons, setTeacherReportLessons] = useState<Lesson[]>(appLessons);
   const [studentLevelOverrides, setStudentLevelOverrides] = useState<Record<string, LearningLevel>>({});
@@ -339,6 +348,12 @@ function Students({
       });
       return;
     }
+    onStudentLevelChanged(studentId, level);
+    setStudentLevelOverrides((current) => {
+      const next = { ...current };
+      delete next[studentId];
+      return next;
+    });
     onSelectStudent(null);
   }
 
