@@ -166,7 +166,16 @@ export function mergePublishedLessons(baseLessons: Lesson[], drafts: CourseDraft
     unlockMode: lesson.unlockMode ?? (index === 0 ? "open" : "previous")
   }]));
   drafts.filter((draft) => draft.status === "published").forEach((draft) => {
-    map.set(draft.id, courseDraftToLesson(draft));
+    const baseLesson = map.get(draft.id);
+    const lesson = courseDraftToLesson(draft);
+    const content = draft.content || {};
+    const hasCustomSortOrder = Number.isFinite(Number(content.sortOrder)) && Number(content.sortOrder) < 900000;
+    map.set(draft.id, {
+      ...lesson,
+      sortOrder: hasCustomSortOrder ? lesson.sortOrder : baseLesson?.sortOrder ?? lesson.sortOrder,
+      unlockMode: lesson.unlockMode || baseLesson?.unlockMode,
+      prerequisiteLessonId: lesson.prerequisiteLessonId || baseLesson?.prerequisiteLessonId
+    });
   });
   return Array.from(map.values()).sort((a, b) => (a.sortOrder || 999000) - (b.sortOrder || 999000));
 }

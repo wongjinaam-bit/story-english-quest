@@ -266,7 +266,7 @@ export function StudentApp() {
     <div className="shell">
       <aside className="side">
         <div className="brand">
-          <div className="brand-logo">S</div>
+          <div className="brand-logo"><OwlMark /></div>
           <div>
             <h1>Story English Quest</h1>
             <p>迷你故事英文任務</p>
@@ -340,22 +340,18 @@ export function StudentApp() {
         {screen === "home" && (
           <>
             <section className="hero">
-              <div>
+              <div className="hero-copy">
                 <p className="eyebrow">Today&apos;s Story Mission</p>
                 <h3>{lesson.title}</h3>
                 <p>
-                  嗨，{student.name}！今天跟著故事完成聽、說、讀、寫四個任務。每完成一個任務都會累積進度，全部完成後解鎖下一個故事。
+                  嗨，{student.name}！歡迎來到英文小教室。跟著 Owl 老師完成聽、說、讀、寫四個任務，收集星星並解鎖下一個故事。
                 </p>
                 <div className="btns">
                   <button className="btn primary" onClick={() => setScreen(recommendedScreen)}><Sparkles size={18} /> {recommendedLabel}</button>
                   <button className="btn secondary" onClick={() => setScreen("map")}>查看課程地圖</button>
                 </div>
               </div>
-              <div className="mascot">
-                <span>{lesson.cover}</span>
-                <strong>{lesson.topic}</strong>
-                <small>{lesson.pattern}</small>
-              </div>
+              <ClassroomHero lesson={lesson} />
             </section>
 
             {assignments.length > 0 && (
@@ -503,6 +499,66 @@ function sortCourseMapLessons(items: Lesson[]) {
     if (levelDiff) return levelDiff;
     return a.title.localeCompare(b.title);
   });
+}
+
+function OwlMark() {
+  return (
+    <div className="owl-mark" aria-hidden="true">
+      <span className="owl-ear left" />
+      <span className="owl-ear right" />
+      <span className="owl-eye left" />
+      <span className="owl-eye right" />
+      <span className="owl-beak" />
+      <span className="owl-cap" />
+    </div>
+  );
+}
+
+function ClassroomHero({ lesson }: { lesson: Lesson }) {
+  return (
+    <div className="classroom-scene" aria-label="英文教室插畫">
+      <div className="classroom-wall">
+        <div className="window-scene"><span /></div>
+        <div className="abc-poster">ABC</div>
+        <div className="blackboard">
+          <strong>Today</strong>
+          <span>{lesson.topic}</span>
+        </div>
+        <div className="letter-wall">
+          <b>A</b><b>B</b><b>C</b>
+        </div>
+      </div>
+      <div className="shelf">
+        <span className="book blue" />
+        <span className="book pink" />
+        <span className="book yellow" />
+        <span className="plant">🌱</span>
+      </div>
+      <div className="desk-scene">
+        <div className="word-card-mini">word</div>
+        <div className="pencil-mini" />
+        <div className="book-mini">ABC</div>
+      </div>
+      <div className="owl-teacher">
+        <div className="speech-bubble">Hello!</div>
+        <div className="graduation-cap" />
+        <div className="owl-body">
+          <span className="owl-wing left" />
+          <span className="owl-wing right" />
+          <span className="owl-face">
+            <i className="eye left" />
+            <i className="eye right" />
+            <i className="beak" />
+          </span>
+          <span className="bowtie" />
+        </div>
+      </div>
+      <span className="scene-star star-one">★</span>
+      <span className="scene-star star-two">★</span>
+      <span className="scene-dot dot-one" />
+      <span className="scene-dot dot-two" />
+    </div>
+  );
 }
 
 function Celebration({ lesson, streak, onClose }: { lesson: Lesson; streak: number; onClose: () => void }) {
