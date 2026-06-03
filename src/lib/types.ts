@@ -65,7 +65,7 @@ export type StudentProgress = {
   completedLessons: string[];
   completedSkills: Record<string, Skill[]>;
   mistakes: Record<string, { label: string; skill: Skill; count: number; nextReview: string }>;
-  answers: { lessonId: string; skill: Skill; correct: boolean; date: string }[];
+  answers: { lessonId: string; skill: Skill; correct: boolean; date: string; label?: string; answer?: string; correctAnswer?: string }[];
   badges: string[];
 };
 

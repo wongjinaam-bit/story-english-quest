@@ -75,14 +75,57 @@ export function courseDraftToLesson(draft: CourseDraft): Lesson {
     pattern: draft.pattern,
     sentences: sentences.length ? sentences : [{ en: draft.pattern.replace("____", "word"), zh: "", image: draft.cover }],
     words,
-    listen,
-    read,
+    listen: listen.length ? listen : buildListeningQuestions(words, draft.id),
+    read: read.length ? read : buildReadingQuestions(sentences, words, draft.id),
     speak,
     write,
     sortOrder: asNumber(content.sortOrder, 999000),
     unlockMode: String(content.unlockMode || "previous") as Lesson["unlockMode"],
     prerequisiteLessonId: String(content.prerequisiteLessonId || "")
   };
+}
+
+function buildListeningQuestions(words: Word[], lessonId: string): ChoiceQuestion[] {
+  return words.slice(0, 5).map((word, index) => {
+    const distractors = words.filter((item) => item.word !== word.word).slice(0, 3).map((item) => item.meaning);
+    return {
+      id: `${lessonId}-auto-listen-${index + 1}`,
+      skill: "listen",
+      type: "choice",
+      prompt: `聽單字，選出意思：${word.word}`,
+      answer: word.meaning,
+      options: [word.meaning, ...distractors].filter(Boolean),
+      audio: word.word
+    };
+  });
+}
+
+function buildReadingQuestions(sentences: StorySentence[], words: Word[], lessonId: string): ChoiceQuestion[] {
+  const firstWord = words[0];
+  const secondWord = words[1] || firstWord;
+  const firstSentence = sentences[0];
+  const questions: ChoiceQuestion[] = [];
+  if (firstWord) {
+    questions.push({
+      id: `${lessonId}-auto-read-1`,
+      skill: "read",
+      type: "choice",
+      prompt: `Which word means「${firstWord.meaning}」?`,
+      answer: firstWord.word,
+      options: words.slice(0, 4).map((item) => item.word)
+    });
+  }
+  if (secondWord) {
+    questions.push({
+      id: `${lessonId}-auto-read-2`,
+      skill: "read",
+      type: "choice",
+      prompt: `Choose the sentence with "${secondWord.word}".`,
+      answer: secondWord.example,
+      options: [secondWord.example, firstSentence?.en || `I see ${secondWord.word}.`, `This is ${secondWord.word}.`, `I like ${secondWord.word}.`]
+    });
+  }
+  return questions;
 }
 
 export function mergePublishedLessons(baseLessons: Lesson[], drafts: CourseDraft[]) {

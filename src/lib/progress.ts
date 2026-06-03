@@ -115,8 +115,16 @@ export function recordSkill(progress: StudentProgress, lessonId: string, skill: 
   updateBadges(progress);
 }
 
-export function recordAnswer(progress: StudentProgress, lessonId: string, skill: Skill, label: string, correct: boolean) {
-  progress.answers.push({ lessonId, skill, correct, date: new Date().toISOString() });
+export function recordAnswer(
+  progress: StudentProgress,
+  lessonId: string,
+  skill: Skill,
+  label: string,
+  correct: boolean,
+  answer = "",
+  correctAnswer = ""
+) {
+  progress.answers.push({ lessonId, skill, correct, label, answer, correctAnswer, date: new Date().toISOString() });
   if (correct) {
     progress.stars += 1;
     if (progress.mistakes[label]) {

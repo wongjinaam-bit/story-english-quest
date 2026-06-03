@@ -243,8 +243,11 @@ function Dashboard({ students, loading, supabaseReady }: { students: StudentRow[
 
 function skillPercent(progress: StudentProgress | null, skill: "listen" | "speak" | "read" | "write") {
   const answers = progress?.answers.filter((item) => item.skill === skill) || [];
-  if (!answers.length) return 0;
-  return Math.round((answers.filter((item) => item.correct).length / answers.length) * 100);
+  const correct = answers.filter((item) => item.correct).length;
+  const completedCount = Object.values(progress?.completedSkills || {}).filter((skills) => skills.includes(skill)).length;
+  const answerPercent = answers.length ? Math.round((correct / answers.length) * 100) : 0;
+  const completionPercent = completedCount ? 100 : 0;
+  return Math.max(answerPercent, completionPercent);
 }
 
 function Students({
@@ -278,6 +281,10 @@ function Students({
 
   const selected = students.find((row) => row.profile.id === selectedStudentId) || students[0] || null;
   const mistakes = Object.values(selected?.progress?.mistakes || {}).sort((a, b) => b.count - a.count);
+  const recentWrongAnswers = (selected?.progress?.answers || [])
+    .filter((item) => !item.correct)
+    .slice(-8)
+    .reverse();
 
   return (
     <div className="grid two teacher-student-layout">
@@ -335,6 +342,18 @@ function Students({
                 <small>{item.skill} · 錯 {item.count} 次 · {item.nextReview}</small>
               </p>
             )) : <p className="muted">目前沒有錯題。</p>}
+
+            <h3>最近答錯記錄</h3>
+            {recentWrongAnswers.length ? recentWrongAnswers.map((item, index) => (
+              <p className="mistake-line" key={`${item.date}-${index}`}>
+                <strong>{item.label || item.skill}</strong>
+                <small>
+                  {item.skill} · 學生答案：{item.answer || "未記錄"} · 正確答案：{item.correctAnswer || "未記錄"}
+                  <br />
+                  {new Date(item.date).toLocaleString("zh-Hant")}
+                </small>
+              </p>
+            )) : <p className="muted">目前沒有答錯記錄。</p>}
           </>
         ) : (
           <p className="muted">還沒有學生資料。學生註冊並開始學習後，這裡會出現詳情。</p>
