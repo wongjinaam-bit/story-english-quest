@@ -49,6 +49,8 @@ export function StudentApp() {
   const [cloudStatus, setCloudStatus] = useState("");
   const [lessons, setLessons] = useState(appLessons);
   const lesson = useMemo(() => lessons.find((item) => item.id === lessonId) || lessons[0] || appLessons[0], [lessonId, lessons]);
+  const listenQuestions = useMemo(() => buildLessonPracticeQuestions(lesson, "listen"), [lesson]);
+  const readQuestions = useMemo(() => buildLessonPracticeQuestions(lesson, "read"), [lesson]);
 
   const loadPublishedCourses = useCallback(async () => {
     if (!supabase) return appLessons;
@@ -413,9 +415,9 @@ export function StudentApp() {
 
         {screen === "story" && <Story lesson={lesson} showZh={showZh} setShowZh={setShowZh} speed={speed} setSpeed={setSpeed} speak={speak} next={() => setScreen("vocab")} />}
         {screen === "vocab" && <Vocabulary lesson={lesson} speak={speak} next={() => setScreen("listen")} onMark={markVocabulary} />}
-        {screen === "listen" && <QuizTask lesson={lesson} skill="listen" questions={lesson.listen} speak={speak} onAnswer={answerQuestion} onDone={() => { completeSkill("listen"); setScreen("speak"); }} />}
+        {screen === "listen" && <QuizTask key={`${lesson.id}-listen`} lesson={lesson} skill="listen" questions={listenQuestions} speak={speak} onAnswer={answerQuestion} onDone={() => { completeSkill("listen"); setScreen("speak"); }} />}
         {screen === "speak" && <SpeakTask lesson={lesson} speak={speak} onAnswer={answerPractice} onDone={() => { completeSkill("speak"); setScreen("read"); }} />}
-        {screen === "read" && <QuizTask lesson={lesson} skill="read" questions={lesson.read} speak={speak} onAnswer={answerQuestion} onDone={() => { completeSkill("read"); setScreen("write"); }} />}
+        {screen === "read" && <QuizTask key={`${lesson.id}-read`} lesson={lesson} skill="read" questions={readQuestions} speak={speak} onAnswer={answerQuestion} onDone={() => { completeSkill("read"); setScreen("write"); }} />}
         {screen === "write" && <WriteTask lesson={lesson} onAnswer={answerPractice} onDone={() => { completeSkill("write"); setScreen("progress"); }} />}
         {screen === "review" && <Review progress={progress} speak={speak} onAnswer={answerReview} />}
         {screen === "progress" && <Progress progress={progress} student={student} />}
@@ -450,6 +452,73 @@ function getLessonUnlockState(item: Lesson, index: number, lessons: Lesson[], co
     reason: unlocked ? "已完成上一課，可以開始。" : `需先完成上一課：${previous.title}`,
     lockLabel: "先完成前一關"
   };
+}
+
+function buildLessonPracticeQuestions(lesson: Lesson, skill: "listen" | "read"): ChoiceQuestion[] {
+  const words = lesson.words.length ? lesson.words : [{ word: lesson.title, meaning: lesson.topic, part: "noun", image: lesson.cover, example: lesson.pattern, translation: "", level: `Level ${lesson.level}` }];
+  const meanings = unique([...words.map((item) => item.meaning), ...appLessons.flatMap((item) => item.words.map((word) => word.meaning))].filter(Boolean));
+  const wordTexts = unique([...words.map((item) => item.word), ...appLessons.flatMap((item) => item.words.map((word) => word.word))].filter(Boolean));
+  const sentences = unique(lesson.sentences.map((item) => item.en).filter(Boolean));
+
+  if (skill === "listen") {
+    const wordQuestions = words.slice(0, 4).map((word, index) => ({
+      id: `${lesson.id}-generated-listen-word-${index + 1}`,
+      skill,
+      type: "choice" as const,
+      prompt: `聽單字，選出意思：${word.word}`,
+      answer: word.meaning,
+      options: fillOptions(word.meaning, meanings),
+      audio: word.word
+    }));
+    const sentence = sentences[0] || words[0].example || lesson.pattern;
+    const sentenceQuestion: ChoiceQuestion = {
+      id: `${lesson.id}-generated-listen-sentence`,
+      skill,
+      type: "choice",
+      prompt: "聽句子，選出你聽到的英文句子",
+      answer: sentence,
+      options: fillOptions(sentence, sentences.length > 1 ? sentences : words.map((item) => item.example).filter(Boolean)),
+      audio: sentence
+    };
+    return [...wordQuestions, sentenceQuestion].slice(0, 5);
+  }
+
+  const wordMeaningQuestions = words.slice(0, 3).map((word, index) => ({
+    id: `${lesson.id}-generated-read-word-${index + 1}`,
+    skill,
+    type: "choice" as const,
+    prompt: `Which word means「${word.meaning}」?`,
+    answer: word.word,
+    options: fillOptions(word.word, wordTexts)
+  }));
+  const exampleWord = words[0];
+  const sentenceQuestion: ChoiceQuestion = {
+    id: `${lesson.id}-generated-read-sentence`,
+    skill,
+    type: "choice",
+    prompt: `Choose the sentence about "${exampleWord.word}".`,
+    answer: exampleWord.example,
+    options: fillOptions(exampleWord.example, words.map((item) => item.example).filter(Boolean))
+  };
+  const storyQuestion: ChoiceQuestion = {
+    id: `${lesson.id}-generated-read-story`,
+    skill,
+    type: "choice",
+    prompt: `What is this story mainly about?`,
+    answer: lesson.topic,
+    options: fillOptions(lesson.topic, unique([lesson.topic, ...appLessons.map((item) => item.topic)]))
+  };
+  return [...wordMeaningQuestions, sentenceQuestion, storyQuestion].slice(0, 5);
+}
+
+function unique(items: string[]) {
+  return Array.from(new Set(items.map((item) => item.trim()).filter(Boolean)));
+}
+
+function fillOptions(answer: string, pool: string[]) {
+  const base = unique([answer, ...pool.filter((item) => item !== answer)]);
+  const fallback = ["cat", "book", "happy", "jump"];
+  return unique([...base, ...fallback]).slice(0, 4);
 }
 
 function StudentLogin({ onEnter }: { onEnter: (student: StudentSession) => Promise<void> }) {
@@ -1016,9 +1085,12 @@ function Progress({ progress, student }: { progress: StudentProgress; student: S
     const answers = progress.answers.filter((item) => item.skill === skill);
     const correct = answers.filter((item) => item.correct).length;
     const completedCount = Object.values(progress.completedSkills).filter((skills) => skills.includes(skill)).length;
-    const answerPercent = answers.length ? Math.round((correct / answers.length) * 100) : 0;
-    const completionPercent = progress.completedLessons.length ? Math.round((completedCount / Math.max(progress.completedLessons.length, completedCount, 1)) * 100) : completedCount ? 100 : 0;
-    return { skill, percent: Math.max(answerPercent, completionPercent) };
+    const percent = answers.length
+      ? Math.round((correct / answers.length) * 100)
+      : completedCount
+        ? 100
+        : 0;
+    return { skill, percent, answered: answers.length, correct };
   });
   return (
     <section>
@@ -1039,6 +1111,7 @@ function Progress({ progress, student }: { progress: StudentProgress; student: S
             <div className="bar-row" key={item.skill}>
               <label><span>{skillLabels[item.skill]}</span><span>{item.percent}%</span></label>
               <div className="progress"><span style={{ width: `${item.percent}%` }} /></div>
+              <small>{item.answered ? `答對 ${item.correct}/${item.answered}` : "完成口說類任務會顯示進度"}</small>
             </div>
           ))}
         </article>

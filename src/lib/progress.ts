@@ -110,7 +110,10 @@ export function recordSkill(progress: StudentProgress, lessonId: string, skill: 
   progress.completedSkills[lessonId] = Array.from(skills);
   if (skills.size >= 4 && !progress.completedLessons.includes(lessonId)) {
     progress.completedLessons.push(lessonId);
-    progress.stars += 10;
+    const lessonAnswers = progress.answers.filter((item) => item.lessonId === lessonId);
+    const correctCount = lessonAnswers.filter((item) => item.correct).length;
+    const accuracy = lessonAnswers.length ? correctCount / lessonAnswers.length : 0;
+    progress.stars += accuracy >= 0.95 ? 10 : accuracy >= 0.7 ? 5 : 0;
   }
   updateBadges(progress);
 }

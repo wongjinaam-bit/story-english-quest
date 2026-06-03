@@ -245,9 +245,8 @@ function skillPercent(progress: StudentProgress | null, skill: "listen" | "speak
   const answers = progress?.answers.filter((item) => item.skill === skill) || [];
   const correct = answers.filter((item) => item.correct).length;
   const completedCount = Object.values(progress?.completedSkills || {}).filter((skills) => skills.includes(skill)).length;
-  const answerPercent = answers.length ? Math.round((correct / answers.length) * 100) : 0;
-  const completionPercent = completedCount ? 100 : 0;
-  return Math.max(answerPercent, completionPercent);
+  if (answers.length) return Math.round((correct / answers.length) * 100);
+  return completedCount ? 100 : 0;
 }
 
 function Students({
