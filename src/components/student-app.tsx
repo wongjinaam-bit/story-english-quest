@@ -119,6 +119,14 @@ export function StudentApp() {
     }
   }, [loadStudentAssignments, screen]);
 
+  useEffect(() => {
+    if (!student || student.mode !== "supabase") return;
+    const timer = window.setInterval(() => {
+      loadStudentAssignments();
+    }, 30000);
+    return () => window.clearInterval(timer);
+  }, [loadStudentAssignments, student]);
+
   async function enterStudent(nextStudent: StudentSession) {
     saveStudentSession(nextStudent);
     setStudent(nextStudent);
@@ -232,7 +240,7 @@ export function StudentApp() {
         <nav className="nav">
           {navItems.map((item) => (
             <button key={item.id} className={screen === item.id ? "active" : ""} onClick={() => setScreen(item.id)}>
-              {item.label}
+              {item.label}{item.id === "home" && assignments.length ? `（${assignments.length}）` : ""}
             </button>
           ))}
           <a className="btn secondary full" href="/qr"><QrCode size={18} /> QR Code</a>
@@ -241,8 +249,8 @@ export function StudentApp() {
         </nav>
 
         <div className="side-card">
-          <strong>今日目標</strong>
-          <p className="muted">完成故事、單字、聽說讀寫任務。</p>
+          <strong>{assignments.length ? `老師任務：${assignments.length} 個` : "今日目標"}</strong>
+          <p className="muted">{assignments.length ? "請先完成老師指定任務。指定課程會優先開放。" : "完成故事、單字、聽說讀寫任務。"}</p>
         </div>
       </aside>
 

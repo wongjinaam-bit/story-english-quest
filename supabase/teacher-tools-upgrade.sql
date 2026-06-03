@@ -32,6 +32,7 @@ alter table public.app_assignments enable row level security;
 alter table public.course_drafts enable row level security;
 
 drop policy if exists "Students can read own app assignments" on public.app_assignments;
+drop policy if exists "Students can complete own app assignments" on public.app_assignments;
 drop policy if exists "Teachers can manage app assignments" on public.app_assignments;
 drop policy if exists "Staff can manage course drafts" on public.course_drafts;
 drop policy if exists "Authenticated users can read course drafts" on public.course_drafts;
@@ -40,6 +41,11 @@ drop policy if exists "Anyone can read published course drafts" on public.course
 create policy "Students can read own app assignments"
   on public.app_assignments for select
   using (auth.uid() = student_id);
+
+create policy "Students can complete own app assignments"
+  on public.app_assignments for update
+  using (auth.uid() = student_id)
+  with check (auth.uid() = student_id);
 
 create policy "Teachers can manage app assignments"
   on public.app_assignments for all
