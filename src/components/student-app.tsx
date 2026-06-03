@@ -66,6 +66,12 @@ type StudentTaskDraft = {
 
 const taskScreens = new Set<Screen>(["story", "vocab", "listen", "speak", "read", "write"]);
 
+const courseWorlds = [
+  { level: 1, key: "forest", icon: "🌱", title: "Level 1 綠意森林", subtitle: "新手村冒險，從日常單字和短句開始。" },
+  { level: 2, key: "ocean", icon: "🌊", title: "Level 2 晴空海洋", subtitle: "出海探索小故事，練習更完整的句子。" },
+  { level: 3, key: "castle", icon: "🔮", title: "Level 3 魔法城堡", subtitle: "挑戰短文閱讀、語法和更高階任務。" }
+] as const;
+
 const navItems: { id: Screen; label: string; icon: string; cuteLabel: string }[] = [
   { id: "home", label: "今日任務", icon: "⭐", cuteLabel: "任務卷軸" },
   { id: "map", label: "課程地圖", icon: "🗺️", cuteLabel: "冒險地圖" },
@@ -142,6 +148,7 @@ export function StudentApp() {
   const [currentLessonScreens, setCurrentLessonScreens] = useState<Record<string, Screen>>({});
   const [taskDraftReady, setTaskDraftReady] = useState(false);
   const [owlHelp, setOwlHelp] = useState<OwlHelp | null>(null);
+  const [lockedHint, setLockedHint] = useState<{ id: string; message: string } | null>(null);
   const lessons = useMemo(() => {
     if (!student) return allLessons;
     const level = defaultLearningLevel(student.proficiencyLevel);
@@ -311,6 +318,11 @@ export function StudentApp() {
   const activeStudent = student;
   const lessonSkills = progress.completedSkills[lesson.id] || [];
   const nextSkill = (["listen", "speak", "read", "write"] as Skill[]).find((skill) => !lessonSkills.includes(skill));
+  const activeMapLessonId = lessons.find((item, index) => {
+    const assigned = assignments.some((assignment) => assignment.lesson_id === item.id);
+    const unlockState = getLessonUnlockState(item, index, lessons, progress.completedLessons, assigned);
+    return unlockState.unlocked && !progress.completedLessons.includes(item.id);
+  })?.id || lesson.id;
   const recommendedScreen: Screen = resumeScreenForLesson(lesson.id);
   const recommendedLabel = !lessonSkills.length
     ? "開始故事任務"
@@ -420,6 +432,11 @@ export function StudentApp() {
   function openLessonAtResume(targetLessonId: string) {
     setLessonId(targetLessonId);
     setScreen(resumeScreenForLesson(targetLessonId));
+  }
+
+  function showLockedLessonHint(targetLessonId: string, message: string) {
+    setLockedHint(null);
+    window.setTimeout(() => setLockedHint({ id: targetLessonId, message }), 0);
   }
 
   async function startAssignment(assignment: AppAssignment) {
@@ -610,36 +627,71 @@ export function StudentApp() {
         )}
 
         {screen === "map" && (
-          <section>
-            <div className="section-title">
-              <h3>故事關卡地圖</h3>
+          <section className="world-map">
+            <div className="map-hero">
+              <div>
+                <p className="eyebrow">Quest Map</p>
+                <h3>故事冒險世界</h3>
+                <p className="muted">沿著森林、海洋、魔法城堡一路前進。完成一關，就會解鎖下一個徽章節點。</p>
+              </div>
               <div className="admin-actions">
                 <span className="pill">完成一關解鎖下一關</span>
-                <button className="btn secondary" type="button" onClick={loadPublishedCourses}>重新整理課程</button>
+                <button className="btn secondary adventure-btn" type="button" onClick={loadPublishedCourses}>重新整理課程</button>
               </div>
             </div>
-            <div className="grid cards">
-              {lessons.map((item, index) => {
-                const completed = progress.completedLessons.includes(item.id);
-                const assigned = assignments.some((assignment) => assignment.lesson_id === item.id);
-                const unlockState = getLessonUnlockState(item, index, lessons, progress.completedLessons, assigned);
-                return (
-                  <article className="card lesson-card" key={item.id}>
-                    <div className="lesson-cover">{item.cover}</div>
-                    <div className="review-head">
-                      <span className={completed ? "pill" : "pill blue"}>{completed ? "已完成" : unlockState.unlocked ? "可開始" : "未解鎖"}</span>
-                      {assigned && <span className="pill">老師指定</span>}
+
+            {courseWorlds.map((world) => {
+              const worldLessons = lessons.filter((item) => item.level === world.level);
+              if (!worldLessons.length) return null;
+              return (
+                <section className={`map-world ${world.key}`} key={world.key}>
+                  <div className="world-title">
+                    <span>{world.icon}</span>
+                    <div>
+                      <h3>{world.title}</h3>
+                      <p>{world.subtitle}</p>
                     </div>
-                    <h3>{item.title}</h3>
-                    <p className="muted">{item.topic} · Level {item.level}</p>
-                    <p className="muted">{unlockState.reason}</p>
-                    <button className={unlockState.unlocked ? "btn primary full" : "btn secondary full"} disabled={!unlockState.unlocked} onClick={() => openLessonAtResume(item.id)}>
-                      {unlockState.unlocked ? (completed ? "回顧故事" : "繼續冒險") : unlockState.lockLabel}
-                    </button>
-                  </article>
-                );
-              })}
-            </div>
+                  </div>
+                  <div className="world-route">
+                    {worldLessons.map((item, worldIndex) => {
+                      const globalIndex = lessons.findIndex((lessonItem) => lessonItem.id === item.id);
+                      const completed = progress.completedLessons.includes(item.id);
+                      const assigned = assignments.some((assignment) => assignment.lesson_id === item.id);
+                      const unlockState = getLessonUnlockState(item, globalIndex, lessons, progress.completedLessons, assigned);
+                      const active = unlockState.unlocked && !completed && item.id === activeMapLessonId;
+                      const routePosition = ["left", "mid", "right", "mid", "left"][worldIndex % 5];
+                      const nodeClass = [
+                        "map-node",
+                        routePosition,
+                        completed ? "passed" : "",
+                        active ? "active" : "",
+                        unlockState.unlocked ? "" : "locked",
+                        lockedHint?.id === item.id ? "shake" : ""
+                      ].filter(Boolean).join(" ");
+                      return (
+                        <div className={nodeClass} key={item.id}>
+                          <button
+                            className="node-badge"
+                            type="button"
+                            onClick={() => unlockState.unlocked ? openLessonAtResume(item.id) : showLockedLessonHint(item.id, unlockState.reason)}
+                          >
+                            <span className="node-emoji">{unlockState.unlocked ? item.cover : "🔒"}</span>
+                            {completed && <span className="node-crown">👑</span>}
+                            {assigned && !completed && <span className="node-pin">📌</span>}
+                          </button>
+                          <div className="node-label">
+                            <strong>{item.title}</strong>
+                            <small>{item.topic} · Level {item.level}</small>
+                            <em>{completed ? "Passed" : unlockState.unlocked ? "Tap to play" : "Locked"}</em>
+                          </div>
+                          {lockedHint?.id === item.id && <div className="locked-bubble">{lockedHint.message}</div>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              );
+            })}
           </section>
         )}
 
