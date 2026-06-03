@@ -217,6 +217,26 @@ h2, h3, p, strong, small, label { overflow-wrap: anywhere; }
   position: static;
   width: 100%;
 }
+.student-report-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background: rgba(19, 31, 56, 0.42);
+  backdrop-filter: blur(8px);
+}
+.student-report-page {
+  width: min(1120px, 100%);
+  max-height: min(88vh, 920px);
+  overflow: auto;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: linear-gradient(135deg, #fffaf0 0%, #f3f7ff 45%, #ecfff9 100%);
+  box-shadow: 0 30px 80px rgba(62, 92, 160, 0.28);
+}
 .student-report {
   display: grid;
   gap: 16px;
@@ -600,6 +620,14 @@ h2, h3, p, strong, small, label { overflow-wrap: anywhere; }
   .learning-path { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .teacher-student-layout { grid-template-columns: 1fr; }
   .student-detail-panel { position: static; }
+  .student-report-backdrop {
+    padding: 14px;
+  }
+  .student-report-page {
+    max-height: 92vh;
+    padding: 18px;
+    border-radius: 20px;
+  }
   .metric-grid { grid-template-columns: repeat(2,1fr); }
   .table {
     min-width: 760px;

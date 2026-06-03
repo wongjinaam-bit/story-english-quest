@@ -338,13 +338,14 @@ function Students({
     );
   }
 
-  const selected = students.find((row) => row.profile.id === selectedStudentId) || students[0] || null;
+  const selected = students.find((row) => row.profile.id === selectedStudentId) || null;
   const mistakes = Object.values(selected?.progress?.mistakes || {}).sort((a, b) => b.count - a.count);
   const reportLessons = lessonReportLessons(selected?.progress || null, teacherReportLessons);
   const unfinishedLessons = reportLessons.filter((lesson) => !selected?.progress?.completedLessons.includes(lesson.id));
 
   return (
-    <div className="grid two teacher-student-layout">
+    <>
+    <div className="teacher-student-layout">
       <article className="panel">
         <div className="section-title compact">
           <h3>學生列表</h3>
@@ -372,16 +373,18 @@ function Students({
           </table>
         )}
       </article>
+    </div>
 
-      <aside className="panel student-detail-panel">
-        {selected ? (
+    {selected && (
+      <div className="student-report-backdrop" role="dialog" aria-modal="true" aria-label={`${selected.profile.name} 的學習報告`}>
+        <div className="student-report-page">
           <div className="student-report">
             <div className="section-title compact">
               <div>
                 <h3>{selected.profile.avatar || "⭐"} {selected.profile.name} 的學習報告</h3>
                 <p className="muted">帳號：{selected.profile.username || "未設定"} · 最後更新：{selected.updated_at ? new Date(selected.updated_at).toLocaleString("zh-Hant") : "尚未同步"}</p>
               </div>
-              <span className="pill blue">學生詳情</span>
+              <button className="btn ghost" type="button" onClick={() => onSelectStudent(null)}>關閉報告</button>
             </div>
             <div className="metric-grid compact-metrics">
               <div className="metric"><strong>{selected.progress?.completedLessons.length || 0}</strong><small>已完成單元</small></div>
@@ -459,11 +462,10 @@ function Students({
               </div>
             </section>
           </div>
-        ) : (
-          <p className="muted">還沒有學生資料。學生註冊並開始學習後，這裡會出現詳情。</p>
-        )}
-      </aside>
-    </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
 
