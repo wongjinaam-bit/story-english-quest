@@ -645,14 +645,43 @@ h2, h3, p, strong, small, label { overflow-wrap: anywhere; }
 .btn.ghost { background: var(--soft-blue); color: var(--primary-dark); }
 .btn.full { width: 100%; }
 .world-map {
+  position: relative;
   border-radius: 34px;
   overflow: hidden;
   background:
-    linear-gradient(180deg, rgba(234, 255, 241, .78) 0%, rgba(234, 255, 241, .78) 32%, rgba(225, 247, 255, .8) 33%, rgba(225, 247, 255, .8) 66%, rgba(243, 232, 255, .82) 67%, rgba(243, 232, 255, .82) 100%);
+    radial-gradient(circle at 12% 8%, rgba(255, 232, 136, .26), transparent 15rem),
+    radial-gradient(circle at 86% 10%, rgba(129, 219, 255, .3), transparent 17rem),
+    linear-gradient(135deg, rgba(244, 255, 249, .92), rgba(235, 247, 255, .92) 48%, rgba(248, 240, 255, .92));
   border: 2px solid rgba(255,255,255,.86);
   box-shadow: 0 22px 55px rgba(73,126,219,.12);
 }
+.world-map::before {
+  content: "ABC   star   pencil   book   word";
+  position: absolute;
+  inset: 18px auto auto 36px;
+  max-width: 82%;
+  color: rgba(72, 112, 202, .08);
+  font-size: clamp(36px, 7vw, 82px);
+  font-weight: 1000;
+  letter-spacing: .55em;
+  pointer-events: none;
+  transform: rotate(-8deg);
+  white-space: nowrap;
+}
+.world-map::after {
+  content: "⭐  📘  ✏️  🧩  🌈  ⭐";
+  position: absolute;
+  right: 24px;
+  top: 118px;
+  color: rgba(48, 84, 170, .12);
+  font-size: 38px;
+  letter-spacing: 1.1rem;
+  opacity: .6;
+  pointer-events: none;
+}
 .map-hero {
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -664,6 +693,63 @@ h2, h3, p, strong, small, label { overflow-wrap: anywhere; }
 }
 .map-hero h3 {
   font-size: clamp(30px, 4vw, 46px);
+}
+.world-tabs {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  padding: 18px 24px 8px;
+  background: rgba(255,255,255,.34);
+  backdrop-filter: blur(12px);
+}
+.world-tabs button {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 14px 16px;
+  border: 2px solid rgba(255,255,255,.9);
+  border-radius: 24px;
+  background: rgba(255,255,255,.72);
+  color: var(--ink);
+  box-shadow: 0 12px 24px rgba(73,126,219,.1), inset 0 -5px 0 rgba(73,126,219,.06);
+  cursor: pointer;
+  text-align: left;
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+.world-tabs button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 30px rgba(73,126,219,.15), inset 0 -5px 0 rgba(73,126,219,.08);
+}
+.world-tabs button.active {
+  border-color: #ffe27a;
+  background: linear-gradient(180deg, rgba(255,255,255,.95), rgba(236, 248, 255, .88));
+  box-shadow: 0 16px 34px rgba(73,126,219,.16), 0 0 0 7px rgba(255,226,122,.28), inset 0 -6px 0 rgba(255,196,77,.22);
+}
+.world-tabs button:disabled {
+  cursor: not-allowed;
+  filter: grayscale(1);
+  opacity: .52;
+}
+.world-tabs span {
+  grid-row: span 2;
+  display: grid;
+  width: 54px;
+  height: 54px;
+  place-items: center;
+  border-radius: 18px;
+  background: #fff7d8;
+  font-size: 30px;
+  box-shadow: inset 0 -6px 0 rgba(73,126,219,.08);
+}
+.world-tabs strong {
+  font-size: 20px;
+}
+.world-tabs small {
+  color: var(--muted);
+  font-weight: 900;
 }
 .map-world {
   position: relative;
@@ -680,38 +766,68 @@ h2, h3, p, strong, small, label { overflow-wrap: anywhere; }
 }
 .map-world.forest {
   background:
+    radial-gradient(circle at 8% 18%, rgba(255,255,255,.76) 0 2.2rem, transparent 2.3rem),
+    radial-gradient(circle at 18% 84%, rgba(134,222,147,.28) 0 6rem, transparent 6.1rem),
+    radial-gradient(circle at 91% 70%, rgba(255,194,213,.28) 0 5.2rem, transparent 5.3rem),
     radial-gradient(circle at 14% 22%, rgba(110,223,192,.42), transparent 12rem),
     radial-gradient(circle at 82% 24%, rgba(255,215,106,.25), transparent 13rem),
     linear-gradient(180deg, #ecfff3, #f8fff6);
 }
 .map-world.forest::before {
-  content: "🌳   🌼       🐿️       🌸";
+  content: "🌳     🌼       🦋       🌸       🍄";
   inset: 70px 0 auto;
   color: rgba(19,119,93,.18);
   font-size: 42px;
   letter-spacing: 2.2rem;
 }
+.map-world.forest::after {
+  left: 6%;
+  bottom: 34px;
+  width: 210px;
+  height: 70px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 24% 30%, rgba(87, 184, 113, .18) 0 22px, transparent 23px),
+    radial-gradient(circle at 62% 18%, rgba(87, 184, 113, .14) 0 32px, transparent 33px),
+    linear-gradient(180deg, rgba(85,177,111,.12), rgba(85,177,111,.04));
+  box-shadow: 240px -80px 0 rgba(116, 209, 136, .08), 520px -28px 0 rgba(116, 209, 136, .08);
+}
 .map-world.ocean {
   background:
+    radial-gradient(circle at 7% 26%, rgba(255,255,255,.82) 0 2.4rem, transparent 2.5rem),
+    radial-gradient(circle at 88% 76%, rgba(255,255,255,.64) 0 5rem, transparent 5.1rem),
     radial-gradient(circle at 76% 18%, rgba(120,183,255,.34), transparent 13rem),
     radial-gradient(circle at 14% 76%, rgba(255,255,255,.7), transparent 12rem),
     linear-gradient(180deg, #e8f8ff, #f4fbff);
 }
 .map-world.ocean::before {
-  content: "☁️        ⛵       〰️       ☁️";
+  content: "☁️        ⛵       🫧       〰️       ☁️";
   inset: 78px 0 auto;
   color: rgba(47,98,216,.16);
   font-size: 42px;
   letter-spacing: 2rem;
 }
+.map-world.ocean::after {
+  left: -5%;
+  right: -5%;
+  bottom: 36px;
+  height: 90px;
+  background:
+    radial-gradient(60px 24px at 12% 36%, rgba(80, 164, 231, .14) 0 56px, transparent 57px),
+    radial-gradient(70px 26px at 34% 56%, rgba(80, 164, 231, .12) 0 66px, transparent 67px),
+    radial-gradient(76px 24px at 61% 34%, rgba(80, 164, 231, .14) 0 70px, transparent 71px),
+    radial-gradient(68px 26px at 86% 58%, rgba(80, 164, 231, .12) 0 64px, transparent 65px);
+}
 .map-world.castle {
   background:
+    radial-gradient(circle at 10% 16%, rgba(255,255,255,.72) 0 2.1rem, transparent 2.2rem),
+    radial-gradient(circle at 88% 60%, rgba(255,226,122,.24) 0 6.5rem, transparent 6.6rem),
     radial-gradient(circle at 80% 18%, rgba(255,215,106,.28), transparent 11rem),
     radial-gradient(circle at 20% 76%, rgba(191,170,255,.38), transparent 15rem),
     linear-gradient(180deg, #f4edff, #f9f5ff);
 }
 .map-world.castle::before {
-  content: "✦       🔮       ✦        🏰";
+  content: "✦       🔮       ✨        🏰       ✦";
   inset: 76px 0 auto;
   color: rgba(99,75,190,.18);
   font-size: 44px;
@@ -1739,6 +1855,17 @@ button.pill {
     align-items: stretch;
     flex-direction: column;
   }
+  .world-tabs {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .world-tabs button {
+    padding: 12px;
+  }
+  .world-tabs span {
+    width: 48px;
+    height: 48px;
+    font-size: 27px;
+  }
   .map-world {
     min-height: auto;
     padding: 24px 18px 34px;
@@ -1800,6 +1927,33 @@ button.pill {
   .owl-teacher { transform: translateX(-50%) scale(.86); transform-origin: bottom center; }
   .world-map {
     border-radius: 24px;
+  }
+  .world-map::before {
+    left: 18px;
+    font-size: 44px;
+    letter-spacing: .35em;
+  }
+  .world-map::after {
+    display: none;
+  }
+  .world-tabs {
+    padding: 14px;
+    gap: 10px;
+  }
+  .world-tabs button {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+    border-radius: 20px;
+  }
+  .world-tabs span {
+    grid-row: auto;
+  }
+  .world-tabs strong {
+    font-size: 17px;
+  }
+  .world-tabs small {
+    font-size: 11px;
   }
   .world-title {
     display: flex;
@@ -1868,6 +2022,17 @@ button.pill {
   .map-hero,
   .map-world {
     padding: 18px 14px;
+  }
+  .world-tabs {
+    grid-template-columns: 1fr;
+  }
+  .world-tabs button {
+    grid-template-columns: auto 1fr;
+    justify-items: start;
+    text-align: left;
+  }
+  .world-tabs span {
+    grid-row: span 2;
   }
   .node-label {
     min-width: 150px;
