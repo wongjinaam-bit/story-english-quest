@@ -208,11 +208,20 @@ h2, h3, p, strong, small, label { overflow-wrap: anywhere; }
 .table th { color: var(--muted); font-size: 13px; }
 .table tbody tr { cursor: pointer; }
 .table tbody tr:hover, .table tbody tr.selected-row { background: #f4f7ff; }
-.teacher-student-layout { grid-template-columns: minmax(360px, 0.85fr) minmax(520px, 1.15fr); }
-.student-detail-panel { position: sticky; top: 22px; }
+.teacher-student-layout {
+  grid-template-columns: 1fr;
+  max-width: 1180px;
+  margin: 0 auto;
+}
+.student-detail-panel {
+  position: static;
+  width: 100%;
+}
 .student-report {
   display: grid;
   gap: 16px;
+  max-width: 1040px;
+  margin: 0 auto;
 }
 .small-btn {
   min-height: 38px;
