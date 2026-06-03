@@ -15,9 +15,12 @@
 }
 
 * { box-sizing: border-box; }
+html { max-width: 100%; overflow-x: hidden; }
 body {
   margin: 0;
   min-height: 100vh;
+  max-width: 100%;
+  overflow-x: hidden;
   background:
     radial-gradient(circle at 12% 5%, rgba(255, 200, 87, .25), transparent 28rem),
     radial-gradient(circle at 100% 0%, rgba(75, 199, 161, .18), transparent 26rem),
@@ -30,7 +33,7 @@ button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .62; box-shadow: none; }
 a { color: inherit; text-decoration: none; }
 
-.shell { display: grid; grid-template-columns: 280px 1fr; min-height: 100vh; }
+.shell { display: grid; grid-template-columns: minmax(240px, 280px) minmax(0, 1fr); min-height: 100vh; }
 .side {
   position: sticky; top: 0; height: 100vh; padding: 24px;
   background: rgba(255,255,255,.82); border-right: 1px solid var(--line);
@@ -51,13 +54,14 @@ a { color: inherit; text-decoration: none; }
 }
 .nav button.active, .nav button:hover { color: var(--primary-dark); background: var(--soft-blue); }
 .side-card { margin-top: 28px; padding: 18px; border-radius: 18px; background: var(--soft-mint); }
-.main { width: min(1220px, 100%); margin: 0 auto; padding: 28px; }
+.main { width: 100%; max-width: 1220px; margin: 0 auto; padding: 28px; }
 .topbar { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 24px; }
 .admin-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
 .local-warning { margin: 0 0 18px; }
 .eyebrow { margin: 0 0 6px; color: var(--primary-dark); font-weight: 900; letter-spacing: .08em; text-transform: uppercase; font-size: 12px; }
 h2 { margin: 0; font-size: clamp(30px, 5vw, 52px); letter-spacing: 0; }
 h3 { margin: 0; font-size: 24px; }
+h2, h3, p, strong, small, label { overflow-wrap: anywhere; }
 .stat-row { display: flex; gap: 12px; flex-wrap: wrap; }
 .stat, .metric, .card, .panel, .hero, .task-card, .word-card {
   border: 1px solid var(--line); background: var(--surface); box-shadow: 0 10px 28px rgba(49,90,217,.08);
@@ -197,7 +201,7 @@ h3 { margin: 0; font-size: 24px; }
 .metric { border-radius: 18px; padding: 18px; min-height: 112px; }
 .bar-row { margin: 16px 0; }
 .bar-row label { display: flex; justify-content: space-between; color: var(--muted); font-weight: 900; margin-bottom: 8px; }
-.admin-shell { min-height: 100vh; display: grid; grid-template-columns: 260px 1fr; }
+.admin-shell { min-height: 100vh; display: grid; grid-template-columns: minmax(230px, 260px) minmax(0, 1fr); }
 .admin-main { padding: 28px; }
 .table { width: 100%; border-collapse: collapse; overflow: hidden; border-radius: 16px; background: white; }
 .table th, .table td { text-align: left; padding: 14px; border-bottom: 1px solid var(--line); }
@@ -443,10 +447,28 @@ h3 { margin: 0; font-size: 24px; }
 }
 .qr-box { display: grid; place-items: center; min-height: 230px; border-radius: 18px; background: #f9fbff; border: 1px dashed #b8c6ea; }
 
-@media (max-width: 920px) {
+@media (max-width: 1180px) {
+  .side { padding: 18px; }
+  .brand h1 { font-size: 20px; }
+  .main, .admin-main { padding: 22px; }
+  .grid.cards { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+  .hero { grid-template-columns: minmax(0, 1fr) 220px; }
+  .mascot { min-height: 210px; }
+}
+
+@media (max-width: 1024px) {
   .shell, .admin-shell { display: block; }
-  .side { position: static; height: auto; padding: 16px; }
-  .nav { grid-template-columns: repeat(3,1fr); }
+  .side {
+    position: static;
+    height: auto;
+    padding: 16px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .brand { margin-bottom: 16px; }
+  .student-chip { margin-bottom: 14px; }
+  .side-card { margin-top: 14px; }
+  .nav { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .nav button { text-align: center; padding: 12px 8px; }
   .main, .admin-main { padding: 18px; }
   .hero, .grid.two { grid-template-columns: 1fr; }
@@ -461,17 +483,78 @@ h3 { margin: 0; font-size: 24px; }
   .teacher-student-layout { grid-template-columns: 1fr; }
   .student-detail-panel { position: static; }
   .metric-grid { grid-template-columns: repeat(2,1fr); }
+  .table {
+    min-width: 760px;
+  }
+  .panel:has(.table),
+  .course-list-panel {
+    overflow-x: auto;
+  }
 }
-@media (max-width: 560px) {
-  .topbar, .section-title { align-items: stretch; flex-direction: column; }
-  .stat-row, .options, .metric-grid, .nav { grid-template-columns: 1fr; display: grid; }
-  .hero { padding: 20px; }
+
+@media (max-width: 720px) {
+  .brand-logo { width: 44px; height: 44px; border-radius: 14px; font-size: 24px; }
+  .brand h1 { font-size: 19px; }
+  .nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .topbar, .section-title {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .stat {
+    min-width: 0;
+    padding: 12px;
+  }
+  .stat strong, .metric strong { font-size: 26px; }
+  .admin-actions {
+    justify-content: stretch;
+  }
+  .admin-actions .btn {
+    flex: 1 1 150px;
+  }
+  .grid.cards { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+  .hero { padding: 22px; border-radius: 20px; }
   .hero h3 { font-size: 38px; }
+  .mascot { min-height: 170px; }
+  .mascot span { font-size: 68px; }
+  .card, .panel, .task-card, .word-card { padding: 16px; border-radius: 16px; }
+  .lesson-card, .word-card, .review-card, .assignment-card { min-height: auto; }
+  .word-actions .btn,
+  .review-actions .btn,
+  .listening-controls .btn {
+    flex: 1 1 100%;
+  }
+  .options, .metric-grid { grid-template-columns: 1fr; display: grid; }
+}
+
+@media (max-width: 560px) {
+  .main, .admin-main { padding: 14px; }
+  .side { padding: 14px; }
+  .nav { grid-template-columns: 1fr; display: grid; }
+  .grid.cards { grid-template-columns: 1fr; }
+  .hero { padding: 20px; }
+  .hero h3, h2 { font-size: 34px; }
   .learning-path { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .story-line { grid-template-columns: 1fr; }
+  .story-line .pic { width: 54px; height: 54px; }
+  .btns .btn,
+  .course-list-footer .btn,
+  .course-table-actions .btn {
+    width: 100%;
+  }
+  .course-table-actions {
+    display: grid;
+  }
   .form-grid,
   .inline-controls {
     grid-template-columns: 1fr;
+  }
+  .editor-section {
+    padding: 14px;
   }
   .sticky-actions .btn {
     width: 100%;
