@@ -41,6 +41,7 @@ type WritingFeedback = {
 };
 
 type WriteTaskState = {
+  index: number;
   answers: Record<string, string>;
   checked: Record<string, { correct: boolean; correctAnswer: string }>;
   aiTips: Record<string, WritingFeedback>;
@@ -52,6 +53,18 @@ type OwlHelp = {
   answer: string;
   note: string;
 };
+
+type StudentTaskDraft = {
+  lessonId: string;
+  screen: Screen;
+  quizTaskStates: Record<string, QuizTaskState>;
+  speakTaskStates: Record<string, SpeakTaskState>;
+  writeTaskStates: Record<string, WriteTaskState>;
+  helpUsed: Record<string, Partial<Record<Skill, boolean>>>;
+  currentLessonScreens: Record<string, Screen>;
+};
+
+const taskScreens = new Set<Screen>(["story", "vocab", "listen", "speak", "read", "write"]);
 
 const navItems: { id: Screen; label: string; icon: string; cuteLabel: string }[] = [
   { id: "home", label: "今日任務", icon: "⭐", cuteLabel: "任務卷軸" },
@@ -80,6 +93,37 @@ const skillLabels: Record<Skill, string> = {
 
 const avatars = ["⭐", "🚀", "🌈", "📚", "🎯", "🏆"];
 
+function emptyTaskDraft(): StudentTaskDraft {
+  return {
+    lessonId: appLessons[0].id,
+    screen: "home",
+    quizTaskStates: {},
+    speakTaskStates: {},
+    writeTaskStates: {},
+    helpUsed: {},
+    currentLessonScreens: {}
+  };
+}
+
+function taskDraftKey(studentId: string) {
+  return `seq-task-draft-${studentId}`;
+}
+
+function loadTaskDraft(studentId: string): StudentTaskDraft {
+  if (typeof window === "undefined") return emptyTaskDraft();
+  try {
+    return { ...emptyTaskDraft(), ...JSON.parse(localStorage.getItem(taskDraftKey(studentId)) || "{}") };
+  } catch {
+    return emptyTaskDraft();
+  }
+}
+
+function saveTaskDraft(studentId: string, draft: StudentTaskDraft) {
+  if (typeof window !== "undefined") {
+    localStorage.setItem(taskDraftKey(studentId), JSON.stringify(draft));
+  }
+}
+
 export function StudentApp() {
   const [screen, setScreen] = useState<Screen>("home");
   const [lessonId, setLessonId] = useState(appLessons[0].id);
@@ -95,6 +139,8 @@ export function StudentApp() {
   const [speakTaskStates, setSpeakTaskStates] = useState<Record<string, SpeakTaskState>>({});
   const [writeTaskStates, setWriteTaskStates] = useState<Record<string, WriteTaskState>>({});
   const [helpUsed, setHelpUsed] = useState<Record<string, Partial<Record<Skill, boolean>>>>({});
+  const [currentLessonScreens, setCurrentLessonScreens] = useState<Record<string, Screen>>({});
+  const [taskDraftReady, setTaskDraftReady] = useState(false);
   const [owlHelp, setOwlHelp] = useState<OwlHelp | null>(null);
   const lessons = useMemo(() => {
     if (!student) return allLessons;
@@ -163,13 +209,47 @@ export function StudentApp() {
     setAssignments((data || []) as AppAssignment[]);
   }, [student]);
 
+  function restoreTaskDraft(studentId: string) {
+    const draft = loadTaskDraft(studentId);
+    setQuizTaskStates(draft.quizTaskStates || {});
+    setSpeakTaskStates(draft.speakTaskStates || {});
+    setWriteTaskStates(draft.writeTaskStates || {});
+    setHelpUsed(draft.helpUsed || {});
+    setCurrentLessonScreens(draft.currentLessonScreens || {});
+    setLessonId(draft.lessonId || appLessons[0].id);
+    setScreen(draft.screen || "home");
+    setTaskDraftReady(true);
+  }
+
   useEffect(() => {
     const savedStudent = loadStudentSession();
     if (savedStudent) {
       setStudent(savedStudent);
+      restoreTaskDraft(savedStudent.id);
       loadCloudProgress(savedStudent.id).then(setProgress);
     }
   }, []);
+
+  useEffect(() => {
+    if (!student || !taskDraftReady) return;
+    saveTaskDraft(student.id, {
+      lessonId,
+      screen,
+      quizTaskStates,
+      speakTaskStates,
+      writeTaskStates,
+      helpUsed,
+      currentLessonScreens
+    });
+  }, [currentLessonScreens, helpUsed, lessonId, quizTaskStates, screen, speakTaskStates, student, taskDraftReady, writeTaskStates]);
+
+  useEffect(() => {
+    if (!student || !taskDraftReady || !taskScreens.has(screen)) return;
+    setCurrentLessonScreens((current) => {
+      if (current[lessonId] === screen) return current;
+      return { ...current, [lessonId]: screen };
+    });
+  }, [lessonId, screen, student, taskDraftReady]);
 
   useEffect(() => {
     if (student && progress) {
@@ -212,8 +292,8 @@ export function StudentApp() {
   async function enterStudent(nextStudent: StudentSession) {
     saveStudentSession(nextStudent);
     setStudent(nextStudent);
+    restoreTaskDraft(nextStudent.id);
     setProgress(await loadCloudProgress(nextStudent.id));
-    setScreen("home");
   }
 
   async function logoutStudent() {
@@ -231,7 +311,7 @@ export function StudentApp() {
   const activeStudent = student;
   const lessonSkills = progress.completedSkills[lesson.id] || [];
   const nextSkill = (["listen", "speak", "read", "write"] as Skill[]).find((skill) => !lessonSkills.includes(skill));
-  const recommendedScreen: Screen = !lessonSkills.length ? "story" : nextSkill || "progress";
+  const recommendedScreen: Screen = resumeScreenForLesson(lesson.id);
   const recommendedLabel = !lessonSkills.length
     ? "開始故事任務"
     : nextSkill
@@ -305,7 +385,7 @@ export function StudentApp() {
   }
 
   function writeStateFor(): WriteTaskState {
-    return writeTaskStates[taskStateKey("write")] || { answers: {}, checked: {}, aiTips: {} };
+    return writeTaskStates[taskStateKey("write")] || { index: 0, answers: {}, checked: {}, aiTips: {} };
   }
 
   function updateWriteState(nextState: WriteTaskState) {
@@ -328,6 +408,20 @@ export function StudentApp() {
     setOwlHelp({ lessonTitle: lesson.title, skill, answer, note });
   }
 
+  function resumeScreenForLesson(targetLessonId: string): Screen {
+    const savedScreen = currentLessonScreens[targetLessonId];
+    if (savedScreen && taskScreens.has(savedScreen)) return savedScreen;
+    const savedSkills = progress?.completedSkills[targetLessonId] || [];
+    if (!savedSkills.length) return "story";
+    const unfinishedSkill = (["listen", "speak", "read", "write"] as Skill[]).find((skill) => !savedSkills.includes(skill));
+    return unfinishedSkill || "progress";
+  }
+
+  function openLessonAtResume(targetLessonId: string) {
+    setLessonId(targetLessonId);
+    setScreen(resumeScreenForLesson(targetLessonId));
+  }
+
   async function startAssignment(assignment: AppAssignment) {
     const nextLessons = await loadPublishedCourses();
     if (!nextLessons.some((item) => item.id === assignment.lesson_id)) {
@@ -335,7 +429,7 @@ export function StudentApp() {
       return;
     }
     setLessonId(assignment.lesson_id);
-    setScreen(assignment.skill === "all" ? "story" : assignment.skill);
+    setScreen(assignment.skill === "all" ? resumeScreenForLesson(assignment.lesson_id) : assignment.skill);
   }
 
   async function completeMatchingAssignments(completedLessonId: string, completedSkill: Skill, lessonCompleted: boolean) {
@@ -539,8 +633,8 @@ export function StudentApp() {
                     <h3>{item.title}</h3>
                     <p className="muted">{item.topic} · Level {item.level}</p>
                     <p className="muted">{unlockState.reason}</p>
-                    <button className={unlockState.unlocked ? "btn primary full" : "btn secondary full"} disabled={!unlockState.unlocked} onClick={() => { setLessonId(item.id); setScreen("story"); }}>
-                      {unlockState.unlocked ? "進入故事" : unlockState.lockLabel}
+                    <button className={unlockState.unlocked ? "btn primary full" : "btn secondary full"} disabled={!unlockState.unlocked} onClick={() => openLessonAtResume(item.id)}>
+                      {unlockState.unlocked ? (completed ? "回顧故事" : "繼續冒險") : unlockState.lockLabel}
                     </button>
                   </article>
                 );
@@ -1312,9 +1406,10 @@ function WriteTask({ lesson, state, onStateChange, helpUsed, onHelp, onAnswer, o
   onAnswer: (skill: Skill, label: string, correct: boolean, answer: string, correctAnswer: string) => void;
   onDone: () => void;
 }) {
+  const safeIndex = Math.min(state.index || 0, Math.max(lesson.write.length - 1, 0));
   const { answers, checked, aiTips } = state;
+  const task = lesson.write[safeIndex];
   const complete = lesson.write.every((item) => checked[item.id]);
-  const nextTask = lesson.write.find((item) => !checked[item.id]) || lesson.write[0];
   const setTaskState = (patch: Partial<WriteTaskState>) => onStateChange({ ...state, ...patch });
   if (!lesson.write.length) {
     return (
@@ -1331,21 +1426,33 @@ function WriteTask({ lesson, state, onStateChange, helpUsed, onHelp, onAnswer, o
     <section className="grid two">
       <article className="panel">
         <div className="section-title">
-          <h3>Write 寫作任務</h3>
+          <h3>Write 寫作任務 · {safeIndex + 1}/{lesson.write.length}</h3>
           <div className="admin-actions">
             <span className="pill">由簡到難</span>
-            <button className="btn owl-help-btn" type="button" disabled={helpUsed || !nextTask} onClick={() => nextTask && onHelp(nextTask.answerHint.trim())}>
+            <button className="btn owl-help-btn" type="button" disabled={helpUsed || !task || Boolean(checked[task.id])} onClick={() => task && onHelp(task.answerHint.trim())}>
               {helpUsed ? "已用求助" : "Owl 求助"}
             </button>
           </div>
         </div>
-        {lesson.write.map((task) => (
+        {task && (
           <div className="task-card" key={task.id}>
+            <div className="review-head">
+              {lesson.write.map((item, index) => (
+                <button
+                  className={index === safeIndex ? "pill blue" : checked[item.id] ? "pill" : "pill muted-pill"}
+                  key={item.id}
+                  type="button"
+                  onClick={() => setTaskState({ index })}
+                >
+                  {checked[item.id] ? "⭐" : index + 1}
+                </button>
+              ))}
+            </div>
             <p className="eyebrow">{task.prompt}</p>
             <h3>{task.starter}</h3>
             <p className="muted">提示：{friendlyWritingHint(task, lesson)}</p>
             <div className="field">
-              <textarea rows={3} placeholder="在這裡寫英文句子，不用怕錯，提交後會看到正確答案。" value={answers[task.id] || ""} onChange={(event) => setTaskState({ answers: { ...answers, [task.id]: event.target.value } })} />
+              <textarea rows={4} placeholder="在這裡寫英文句子，不用怕錯，提交後會看到正確答案。" value={answers[task.id] || ""} onChange={(event) => setTaskState({ answers: { ...answers, [task.id]: event.target.value } })} />
             </div>
             <div className="btns">
               <button className="btn ghost" disabled={!answers[task.id]?.trim()} onClick={() => {
@@ -1365,9 +1472,17 @@ function WriteTask({ lesson, state, onStateChange, helpUsed, onHelp, onAnswer, o
                 {checked[task.id].correct ? "寫得很好！" : `還差一點，正確答案參考：${checked[task.id].correctAnswer}`}
               </p>
             )}
+            {checked[task.id] && (
+              <div className="btns">
+                {safeIndex < lesson.write.length - 1 ? (
+                  <button className="btn primary" type="button" onClick={() => setTaskState({ index: safeIndex + 1 })}>下一題</button>
+                ) : (
+                  <button className="btn primary" type="button" disabled={!complete} onClick={onDone}>完成寫作任務</button>
+                )}
+              </div>
+            )}
           </div>
-        ))}
-        <button className="btn primary full" disabled={!complete} onClick={onDone}>完成寫作任務</button>
+        )}
       </article>
       <aside className="panel">
         <h3>AI 寫作小老師</h3>
