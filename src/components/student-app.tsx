@@ -53,13 +53,22 @@ type OwlHelp = {
   note: string;
 };
 
-const navItems: { id: Screen; label: string }[] = [
-  { id: "home", label: "今日任務" },
-  { id: "map", label: "課程地圖" },
-  { id: "story", label: "故事" },
-  { id: "vocab", label: "單字" },
-  { id: "review", label: "再挑戰" },
-  { id: "progress", label: "進度" }
+const navItems: { id: Screen; label: string; icon: string; cuteLabel: string }[] = [
+  { id: "home", label: "今日任務", icon: "⭐", cuteLabel: "任務卷軸" },
+  { id: "map", label: "課程地圖", icon: "🗺️", cuteLabel: "冒險地圖" },
+  { id: "story", label: "故事", icon: "📖", cuteLabel: "故事書" },
+  { id: "vocab", label: "單字", icon: "🔤", cuteLabel: "字母卡" },
+  { id: "review", label: "再挑戰", icon: "🚩", cuteLabel: "勇氣挑戰" },
+  { id: "progress", label: "進度", icon: "🏆", cuteLabel: "星星進度" }
+];
+
+const skillQuestSteps: { skill?: Skill; label: string; icon: string; screen: Screen }[] = [
+  { label: "故事", icon: "📖", screen: "story" },
+  { label: "單字", icon: "🔤", screen: "vocab" },
+  { skill: "listen", label: "聽力", icon: "🎧", screen: "listen" },
+  { skill: "speak", label: "口說", icon: "🎙️", screen: "speak" },
+  { skill: "read", label: "閱讀", icon: "📚", screen: "read" },
+  { skill: "write", label: "寫作", icon: "✏️", screen: "write" }
 ];
 
 const skillLabels: Record<Skill, string> = {
@@ -366,7 +375,11 @@ export function StudentApp() {
         <nav className="nav">
           {navItems.map((item) => (
             <button key={item.id} className={screen === item.id ? "active" : ""} onClick={() => setScreen(item.id)}>
-              {item.label}{item.id === "home" && assignments.length ? `（${assignments.length}）` : ""}
+              <span className="nav-icon">{item.icon}</span>
+              <span className="nav-copy">
+                <strong>{item.label}{item.id === "home" && assignments.length ? `（${assignments.length}）` : ""}</strong>
+                <small>{item.cuteLabel}</small>
+              </span>
             </button>
           ))}
           <a className="btn secondary full" href="/qr"><QrCode size={18} /> QR Code</a>
@@ -400,10 +413,10 @@ export function StudentApp() {
             <h2>{titleFor(screen)}</h2>
           </div>
           <div className="stat-row">
-            <div className="stat"><strong>{progress.stars}</strong><small>星星</small></div>
-            <div className="stat"><strong>{progress.streak || 0}</strong><small>連續打卡</small></div>
-            <div className="stat"><strong>{progress.completedLessons.length}</strong><small>完成故事</small></div>
-            <div className="stat"><strong>{Object.keys(progress.mistakes).length}</strong><small>再挑戰</small></div>
+            <div className="stat reward-stat"><span>⭐</span><strong>{progress.stars}</strong><small>星星寶箱</small></div>
+            <div className="stat reward-stat"><span>🔥</span><strong>{progress.streak || 0}</strong><small>火焰連勝</small></div>
+            <div className="stat reward-stat"><span>📖</span><strong>{progress.completedLessons.length}</strong><small>故事徽章</small></div>
+            <div className="stat reward-stat"><span>🚩</span><strong>{Object.keys(progress.mistakes).length}</strong><small>勇氣值</small></div>
           </div>
         </header>
 
@@ -422,14 +435,21 @@ export function StudentApp() {
           <>
             <section className="hero">
               <div className="hero-copy">
-                <p className="eyebrow">Today&apos;s Story Mission</p>
+                <div className="mission-kicker">
+                  <span>Today&apos;s Mission</span>
+                  <strong>Level {lesson.level}｜{lesson.topic}</strong>
+                </div>
                 <h3>{lesson.title}</h3>
+                <div className="mission-title-card">
+                  <span>Owl Quest</span>
+                  <strong>{lesson.pattern}</strong>
+                </div>
                 <p>
                   嗨，{student.name}！歡迎來到英文小教室。跟著 Owl 老師完成聽、說、讀、寫四個任務，收集星星並解鎖下一個故事。
                 </p>
                 <div className="btns">
-                  <button className="btn primary" onClick={() => setScreen(recommendedScreen)}><Sparkles size={18} /> {recommendedLabel}</button>
-                  <button className="btn secondary" onClick={() => setScreen("map")}>查看課程地圖</button>
+                  <button className="btn primary adventure-btn" onClick={() => setScreen(recommendedScreen)}><Sparkles size={18} /> 開始今天的冒險</button>
+                  <button className="btn secondary adventure-btn" onClick={() => setScreen("map")}>打開冒險地圖</button>
                 </div>
               </div>
               <ClassroomHero lesson={lesson} />
@@ -463,20 +483,19 @@ export function StudentApp() {
               </>
             )}
 
-            <section className="learning-path">
-              {[
-                { label: "故事", done: lessonSkills.length > 0 || progress.completedLessons.includes(lesson.id) },
-                { label: "單字", done: lessonSkills.length > 0 || progress.completedLessons.includes(lesson.id) },
-                { label: "聽力", done: lessonSkills.includes("listen") },
-                { label: "口說", done: lessonSkills.includes("speak") },
-                { label: "閱讀", done: lessonSkills.includes("read") },
-                { label: "寫作", done: lessonSkills.includes("write") }
-              ].map((step, index) => (
-                <div className={step.done ? "path-step done" : "path-step"} key={step.label}>
-                  <strong>{index + 1}</strong>
-                  <span>{step.label}</span>
-                </div>
-              ))}
+            <section className="quest-road">
+              {skillQuestSteps.map((step, index) => {
+                const done = step.skill
+                  ? lessonSkills.includes(step.skill)
+                  : lessonSkills.length > 0 || progress.completedLessons.includes(lesson.id);
+                return (
+                  <button className={done ? "quest-node done" : "quest-node"} key={step.label} onClick={() => setScreen(step.screen)}>
+                    <span className="quest-icon">{done ? "⭐" : step.icon}</span>
+                    <strong>{step.label}</strong>
+                    <small>{done ? "已完成" : `第 ${index + 1} 關`}</small>
+                  </button>
+                );
+              })}
             </section>
 
             <div className="section-title"><h3>四項任務進度</h3></div>
@@ -603,8 +622,8 @@ function ClassroomHero({ lesson }: { lesson: Lesson }) {
         <div className="window-scene"><span /></div>
         <div className="abc-poster">ABC</div>
         <div className="blackboard">
-          <strong>Today</strong>
-          <span>{lesson.topic}</span>
+          <strong>Today&apos;s Words</strong>
+          <span>{lesson.words.slice(0, 3).map((word) => word.word).join(" · ") || lesson.topic}</span>
         </div>
         <div className="letter-wall">
           <b>A</b><b>B</b><b>C</b>
@@ -617,12 +636,13 @@ function ClassroomHero({ lesson }: { lesson: Lesson }) {
         <span className="plant">🌱</span>
       </div>
       <div className="desk-scene">
-        <div className="word-card-mini">word</div>
+        <div className="word-card-mini">{lesson.words[0]?.word || "word"}</div>
+        <div className="word-card-mini floating-two">{lesson.words[1]?.word || "star"}</div>
         <div className="pencil-mini" />
         <div className="book-mini">ABC</div>
       </div>
       <div className="owl-teacher">
-        <div className="speech-bubble">Hello!</div>
+        <div className="speech-bubble">Ready?</div>
         <div className="graduation-cap" />
         <div className="owl-body">
           <span className="owl-wing left" />
