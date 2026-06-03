@@ -1,4 +1,5 @@
 create type user_role as enum ('student', 'teacher', 'admin');
+create type learning_level as enum ('beginner', 'intermediate', 'advanced');
 create type skill_type as enum ('listen', 'speak', 'read', 'write');
 
 create table public.profiles (
@@ -8,6 +9,7 @@ create table public.profiles (
   role user_role not null default 'student',
   avatar text,
   class_id uuid,
+  proficiency_level learning_level not null default 'beginner',
   last_seen_at timestamptz,
   created_at timestamptz not null default now()
 );

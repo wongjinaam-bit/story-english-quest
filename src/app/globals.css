@@ -557,6 +557,32 @@ h2, h3, p, strong, small, label { overflow-wrap: anywhere; }
   background: var(--soft-blue);
   box-shadow: 0 10px 22px rgba(78, 124, 255, .16);
 }
+.level-choice-grid {
+  display: grid;
+  gap: 10px;
+}
+.level-choice {
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+  border: 2px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+  color: var(--ink);
+  text-align: left;
+}
+.level-choice strong {
+  font-size: 17px;
+}
+.level-choice small {
+  color: var(--muted);
+  line-height: 1.45;
+}
+.level-choice.active {
+  border-color: var(--primary);
+  background: var(--soft-blue);
+  box-shadow: 0 10px 22px rgba(78, 124, 255, .16);
+}
 .form-error {
   margin: 0;
   color: var(--rose);

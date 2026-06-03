@@ -2,6 +2,8 @@ export type Skill = "listen" | "speak" | "read" | "write";
 
 export type UserRole = "student" | "teacher" | "admin";
 
+export type LearningLevel = "beginner" | "intermediate" | "advanced";
+
 export type Word = {
   word: string;
   meaning: string;
@@ -46,6 +48,7 @@ export type Lesson = {
   title: string;
   topic: string;
   level: number;
+  difficulty?: LearningLevel;
   cover: string;
   pattern: string;
   sentences: StorySentence[];
@@ -75,6 +78,7 @@ export type StudentSession = {
   name: string;
   code: string;
   avatar: string;
+  proficiencyLevel?: LearningLevel;
   loginAt: string;
   mode: "local" | "supabase";
 };
@@ -86,6 +90,7 @@ export type Profile = {
   role: UserRole;
   avatar: string | null;
   class_id: string | null;
+  proficiency_level?: LearningLevel | null;
   last_seen_at: string | null;
 };
 

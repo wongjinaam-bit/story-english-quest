@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import { cleanUsername, usernameToEmail } from "@/lib/progress";
-import type { Profile, StudentSession, UserRole } from "@/lib/types";
+import { defaultLearningLevel } from "@/lib/learning-levels";
+import type { LearningLevel, Profile, StudentSession, UserRole } from "@/lib/types";
 
 type AuthResult =
   | { ok: true; profile: Profile; session: StudentSession }
@@ -32,6 +33,7 @@ export async function signUpStudent(params: {
   password: string;
   name: string;
   avatar: string;
+  proficiencyLevel: LearningLevel;
 }): Promise<AuthResult> {
   if (!supabase) return { ok: false, message: "Supabase 還沒設定，暫時不能註冊正式帳號。" };
 
@@ -45,7 +47,8 @@ export async function signUpStudent(params: {
         name: params.name,
         username,
         role: "student",
-        avatar: params.avatar
+        avatar: params.avatar,
+        proficiency_level: params.proficiencyLevel
       }
     }
   });
@@ -58,7 +61,8 @@ export async function signUpStudent(params: {
     name: params.name,
     username,
     role: "student",
-    avatar: params.avatar
+    avatar: params.avatar,
+    proficiencyLevel: params.proficiencyLevel
   });
 
   if (!profile.ok) return profile;
@@ -81,7 +85,8 @@ export async function signInStudent(username: string, password: string): Promise
     name: data.user.user_metadata?.name || clean,
     username: clean,
     role: "student",
-    avatar: data.user.user_metadata?.avatar || "⭐"
+    avatar: data.user.user_metadata?.avatar || "⭐",
+    proficiencyLevel: defaultLearningLevel(data.user.user_metadata?.proficiency_level)
   });
 
   if (!profile.ok) return profile;
@@ -118,7 +123,7 @@ async function getProfile(id: string): Promise<{ ok: true; profile: Profile } | 
 
 async function getOrCreateProfile(
   id: string,
-  fallback: { name: string; username: string; role: UserRole; avatar: string }
+  fallback: { name: string; username: string; role: UserRole; avatar: string; proficiencyLevel?: LearningLevel }
 ): Promise<{ ok: true; profile: Profile } | { ok: false; message: string }> {
   const existing = await getProfile(id);
   if (existing.ok) return existing;
@@ -131,6 +136,7 @@ async function upsertProfile(params: {
   username: string;
   role: UserRole;
   avatar: string;
+  proficiencyLevel?: LearningLevel;
 }): Promise<{ ok: true; profile: Profile } | { ok: false; message: string }> {
   if (!supabase) return { ok: false, message: "Supabase is not configured." };
   const { data, error } = await supabase
@@ -141,6 +147,7 @@ async function upsertProfile(params: {
       username: params.username,
       role: params.role,
       avatar: params.avatar,
+      proficiency_level: params.proficiencyLevel || "beginner",
       last_seen_at: new Date().toISOString()
     })
     .select()
@@ -162,6 +169,7 @@ function profileToStudentSession(profile: Profile): StudentSession {
     name: profile.name,
     code: profile.username || profile.id.slice(0, 6),
     avatar: profile.avatar || "⭐",
+    proficiencyLevel: defaultLearningLevel(profile.proficiency_level),
     loginAt: new Date().toISOString(),
     mode: "supabase"
   };

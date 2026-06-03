@@ -4,8 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { appLessons } from "@/data/lessons";
 import { isSupabaseReady, signInStaff, signOut } from "@/lib/auth";
 import { mergePublishedLessons } from "@/lib/course-drafts";
+import { defaultLearningLevel, learningLevelLabels, lessonDifficulty } from "@/lib/learning-levels";
 import { supabase } from "@/lib/supabase";
-import type { AppAssignment, CourseDraft, Lesson, Profile, Skill, StudentProgress, UserRole } from "@/lib/types";
+import type { AppAssignment, CourseDraft, LearningLevel, Lesson, Profile, Skill, StudentProgress, UserRole } from "@/lib/types";
 
 type AdminTab = "dashboard" | "students" | "assignments" | "courses" | "admin";
 
@@ -308,6 +309,7 @@ function Students({
   onSelectStudent: (id: string | null) => void;
 }) {
   const [teacherReportLessons, setTeacherReportLessons] = useState<Lesson[]>(appLessons);
+  const [studentLevelOverrides, setStudentLevelOverrides] = useState<Record<string, LearningLevel>>({});
 
   useEffect(() => {
     async function loadTeacherReportLessons() {
@@ -321,6 +323,24 @@ function Students({
     }
     loadTeacherReportLessons();
   }, [supabaseReady]);
+
+  async function updateStudentLevel(studentId: string, level: LearningLevel) {
+    if (!supabaseReady || !supabase) return;
+    setStudentLevelOverrides((current) => ({ ...current, [studentId]: level }));
+    const { error } = await supabase
+      .from("profiles")
+      .update({ proficiency_level: level })
+      .eq("id", studentId);
+    if (error) {
+      setStudentLevelOverrides((current) => {
+        const next = { ...current };
+        delete next[studentId];
+        return next;
+      });
+      return;
+    }
+    onSelectStudent(null);
+  }
 
   if (!supabaseReady) {
     return (
@@ -353,7 +373,7 @@ function Students({
         </div>
         {loading ? <p className="muted">載入學生資料中...</p> : (
           <table className="table">
-            <thead><tr><th>學生</th><th>帳號</th><th>完成故事</th><th>星星</th><th>錯題</th><th>操作</th></tr></thead>
+            <thead><tr><th>學生</th><th>帳號</th><th>程度</th><th>完成故事</th><th>星星</th><th>錯題</th><th>操作</th></tr></thead>
             <tbody>
               {students.map((row) => (
                 <tr
@@ -363,6 +383,17 @@ function Students({
                 >
                   <td>{row.profile.avatar || "⭐"} {row.profile.name}</td>
                   <td>{row.profile.username}</td>
+                  <td>
+                    <select
+                      value={studentLevelOverrides[row.profile.id] || defaultLearningLevel(row.profile.proficiency_level)}
+                      onClick={(event) => event.stopPropagation()}
+                      onChange={(event) => updateStudentLevel(row.profile.id, event.target.value as LearningLevel)}
+                    >
+                      {(["beginner", "intermediate", "advanced"] as LearningLevel[]).map((level) => (
+                        <option key={level} value={level}>{learningLevelLabels[level]}</option>
+                      ))}
+                    </select>
+                  </td>
                   <td>{row.progress?.completedLessons.length || 0}</td>
                   <td>{row.progress?.stars || 0}</td>
                   <td>{Object.keys(row.progress?.mistakes || {}).length}</td>
@@ -576,7 +607,11 @@ function Assignments({ students, teacher, supabaseReady }: { students: StudentRo
           <div className="field">
             <label>課程</label>
             <select value={lessonId} onChange={(event) => setLessonId(event.target.value)}>
-              {assignableLessons.map((lesson) => <option key={lesson.id} value={lesson.id}>{lesson.title}</option>)}
+              {assignableLessons.map((lesson) => (
+                <option key={lesson.id} value={lesson.id}>
+                  {learningLevelLabels[lessonDifficulty(lesson)]} · {lesson.title}
+                </option>
+              ))}
             </select>
             <small>這裡會包含已發布到學生端的自訂課程。</small>
           </div>
@@ -623,6 +658,7 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
   const [title, setTitle] = useState("");
   const [topic, setTopic] = useState("");
   const [level, setLevel] = useState(1);
+  const [difficulty, setDifficulty] = useState<LearningLevel>("beginner");
   const [cover, setCover] = useState("📘");
   const [pattern, setPattern] = useState("I see a ____.");
   const [sentencesText, setSentencesText] = useState("");
@@ -642,6 +678,7 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
     setTitle(lesson.title);
     setTopic(lesson.topic);
     setLevel(lesson.level);
+    setDifficulty(lessonDifficulty(lesson));
     setCover(lesson.cover);
     setPattern(lesson.pattern);
     setSentencesText(lesson.sentences.map((item) => `${item.en} | ${item.zh} | ${item.image}`).join("\n"));
@@ -683,6 +720,7 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
     setCover(draft.cover);
     setPattern(draft.pattern);
     const content = draft.content as any;
+    setDifficulty(defaultLearningLevel(content.difficulty));
     setSentencesText(content.sentencesText || "");
     setWordsText(content.wordsText || "");
     setListenText(content.listenText || "");
@@ -702,6 +740,7 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
     setTitle("");
     setTopic("");
     setLevel(1);
+    setDifficulty("beginner");
     setCover("📘");
     setPattern("I see a ____.");
     setSentencesText("");
@@ -721,6 +760,7 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
     setTitle("My New Story");
     setTopic("Daily Life");
     setLevel(1);
+    setDifficulty("beginner");
     setCover("📘");
     setPattern("I can ____.");
     setSentencesText([
@@ -791,6 +831,7 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
         readText,
         speakText,
         writeText,
+        difficulty,
         sortOrder,
         positionMode,
         positionAfterLessonId,
@@ -851,6 +892,7 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
       title: draft?.title || lesson.title,
       topic: draft?.topic || lesson.topic,
       level: draft?.level || lesson.level,
+      difficulty: defaultLearningLevel(content.difficulty || lessonDifficulty(lesson)),
       cover: draft?.cover || lesson.cover,
       words: draft ? countFilledLines((draft.content as any)?.wordsText) : lesson.words.length,
       status: draft ? (draft.status === "published" ? "已發布自訂版" : "草稿覆蓋中") : "內建已發布",
@@ -871,6 +913,7 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
       title: draft.title,
       topic: draft.topic,
       level: draft.level,
+      difficulty: defaultLearningLevel((draft.content as any)?.difficulty || "beginner"),
       cover: draft.cover,
       words: countFilledLines((draft.content as any)?.wordsText),
       status: draft.status === "published" ? "已發布到學生端" : "草稿",
@@ -957,6 +1000,14 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
                 <div className="field"><label>課程名稱</label><input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="例如：At the Park" /></div>
                 <div className="field"><label>主題</label><input value={topic} onChange={(event) => setTopic(event.target.value)} placeholder="例如：Nature / School / Food" /></div>
                 <div className="field"><label>Level</label><input type="number" min={1} max={6} value={level} onChange={(event) => setLevel(Number(event.target.value))} /></div>
+                <div className="field">
+                  <label>適用程度</label>
+                  <select value={difficulty} onChange={(event) => setDifficulty(event.target.value as LearningLevel)}>
+                    {(["beginner", "intermediate", "advanced"] as LearningLevel[]).map((item) => (
+                      <option key={item} value={item}>{learningLevelLabels[item]}</option>
+                    ))}
+                  </select>
+                </div>
                 <div className="field"><label>封面圖示</label><input value={cover} onChange={(event) => setCover(event.target.value)} placeholder="例如：📘" /></div>
                 <div className="field span-2"><label>核心句型</label><input value={pattern} onChange={(event) => setPattern(event.target.value)} placeholder="例如：I can ____." /></div>
               </div>
@@ -1095,13 +1146,14 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
           </div>
         </div>
         <table className="table">
-          <thead><tr><th>排序</th><th>課程</th><th>主題</th><th>Level</th><th>單字</th><th>解鎖方式</th><th>狀態</th><th>操作</th></tr></thead>
+          <thead><tr><th>排序</th><th>課程</th><th>主題</th><th>程度</th><th>Level</th><th>單字</th><th>解鎖方式</th><th>狀態</th><th>操作</th></tr></thead>
           <tbody>
             {courseRows.map((row, index) => (
               <tr key={row.id}>
                 <td>{index + 1}</td>
                 <td><strong>{row.cover} {row.title}</strong><small>{row.source}</small></td>
                 <td>{row.topic}</td>
+                <td><span className="pill">{learningLevelLabels[defaultLearningLevel(row.difficulty)]}</span></td>
                 <td>{row.level}</td>
                 <td>{row.words}</td>
                 <td>{unlockLabel(row)}</td>

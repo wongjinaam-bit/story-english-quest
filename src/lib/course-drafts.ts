@@ -1,3 +1,4 @@
+import { defaultLearningLevel, lessonDifficulty } from "@/lib/learning-levels";
 import type { ChoiceQuestion, CourseDraft, Lesson, Skill, StorySentence, Word } from "@/lib/types";
 
 function splitLine(line: string) {
@@ -71,6 +72,7 @@ export function courseDraftToLesson(draft: CourseDraft): Lesson {
     title: draft.title,
     topic: draft.topic,
     level: draft.level,
+    difficulty: defaultLearningLevel(String(content.difficulty || lessonDifficulty({ level: draft.level }))),
     cover: draft.cover,
     pattern: draft.pattern,
     sentences: sentences.length ? sentences : [{ en: draft.pattern.replace("____", "word"), zh: "", image: draft.cover }],
@@ -131,6 +133,7 @@ function buildReadingQuestions(sentences: StorySentence[], words: Word[], lesson
 export function mergePublishedLessons(baseLessons: Lesson[], drafts: CourseDraft[]) {
   const map = new Map<string, Lesson>(baseLessons.map((lesson, index) => [lesson.id, {
     ...lesson,
+    difficulty: lesson.difficulty || lessonDifficulty(lesson),
     sortOrder: lesson.sortOrder ?? (index + 1) * 1000,
     unlockMode: lesson.unlockMode ?? (index === 0 ? "open" : "previous")
   }]));

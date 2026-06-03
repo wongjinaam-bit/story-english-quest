@@ -5,6 +5,7 @@ import { Headphones, LogOut, Mic, QrCode, Sparkles, Star, UserRound } from "luci
 import { appLessons } from "@/data/lessons";
 import { isSupabaseReady, signInStudent, signOut, signUpStudent } from "@/lib/auth";
 import { mergePublishedLessons } from "@/lib/course-drafts";
+import { canStudentSeeLesson, defaultLearningLevel, learningLevelDescriptions, learningLevelLabels } from "@/lib/learning-levels";
 import { supabase } from "@/lib/supabase";
 import {
   clearStudentSession,
@@ -16,7 +17,7 @@ import {
   saveCloudProgress,
   saveStudentSession
 } from "@/lib/progress";
-import type { AppAssignment, ChoiceQuestion, CourseDraft, Lesson, Skill, StudentProgress, StudentSession, Word } from "@/lib/types";
+import type { AppAssignment, ChoiceQuestion, CourseDraft, LearningLevel, Lesson, Skill, StudentProgress, StudentSession, Word } from "@/lib/types";
 
 type Screen = "home" | "map" | "story" | "vocab" | "listen" | "speak" | "read" | "write" | "review" | "progress";
 
@@ -47,7 +48,13 @@ export function StudentApp() {
   const [speed, setSpeed] = useState(0.85);
   const [assignments, setAssignments] = useState<AppAssignment[]>([]);
   const [cloudStatus, setCloudStatus] = useState("");
-  const [lessons, setLessons] = useState(appLessons);
+  const [allLessons, setAllLessons] = useState<Lesson[]>(appLessons);
+  const lessons = useMemo(() => {
+    if (!student) return allLessons;
+    const level = defaultLearningLevel(student.proficiencyLevel);
+    const assignedIds = new Set(assignments.map((assignment) => assignment.lesson_id));
+    return allLessons.filter((item) => canStudentSeeLesson(level, item, assignedIds.has(item.id)));
+  }, [allLessons, assignments, student]);
   const lesson = useMemo(() => lessons.find((item) => item.id === lessonId) || lessons[0] || appLessons[0], [lessonId, lessons]);
   const listenQuestions = useMemo(() => buildLessonPracticeQuestions(lesson, "listen"), [lesson]);
   const readQuestions = useMemo(() => buildLessonPracticeQuestions(lesson, "read"), [lesson]);
@@ -64,12 +71,15 @@ export function StudentApp() {
       return appLessons;
     }
     const nextLessons = mergePublishedLessons(appLessons, (data || []) as CourseDraft[]);
-    setLessons(nextLessons);
-    if (!nextLessons.some((item) => item.id === lessonId)) {
-      setLessonId(nextLessons[0]?.id || appLessons[0].id);
-    }
+    setAllLessons(nextLessons);
     return nextLessons;
-  }, [lessonId]);
+  }, []);
+
+  useEffect(() => {
+    if (lessons.length && !lessons.some((item) => item.id === lessonId)) {
+      setLessonId(lessons[0].id);
+    }
+  }, [lessonId, lessons]);
 
   const loadStudentAssignments = useCallback(async () => {
     if (!student || student.mode !== "supabase" || !supabase) {
@@ -240,6 +250,7 @@ export function StudentApp() {
           <div>
             <strong>{student.name}</strong>
             <small>{student.mode === "supabase" ? "雲端帳號" : "本機模式"}：{student.code}</small>
+            <small>{learningLevelLabels[defaultLearningLevel(student.proficiencyLevel)]}課程</small>
           </div>
         </div>
 
@@ -527,6 +538,7 @@ function StudentLogin({ onEnter }: { onEnter: (student: StudentSession) => Promi
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [avatar, setAvatar] = useState(avatars[0]);
+  const [proficiencyLevel, setProficiencyLevel] = useState<LearningLevel>("beginner");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const supabaseReady = isSupabaseReady();
@@ -554,7 +566,7 @@ function StudentLogin({ onEnter }: { onEnter: (student: StudentSession) => Promi
 
     setBusy(true);
     const result = mode === "register"
-      ? await signUpStudent({ username, password, name, avatar })
+      ? await signUpStudent({ username, password, name, avatar, proficiencyLevel })
       : await signInStudent(username, password);
     setBusy(false);
 
@@ -571,6 +583,7 @@ function StudentLogin({ onEnter }: { onEnter: (student: StudentSession) => Promi
       name: studentName,
       code,
       avatar: studentAvatar,
+      proficiencyLevel: "beginner",
       loginAt: new Date().toISOString(),
       mode: "local"
     });
@@ -614,6 +627,24 @@ function StudentLogin({ onEnter }: { onEnter: (student: StudentSession) => Promi
                 {avatars.map((item) => (
                   <button type="button" className={avatar === item ? "avatar-choice active" : "avatar-choice"} key={item} onClick={() => setAvatar(item)}>
                     {item}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {mode === "register" && (
+            <div className="field">
+              <label>選擇學習程度</label>
+              <div className="level-choice-grid">
+                {(["beginner", "intermediate", "advanced"] as LearningLevel[]).map((level) => (
+                  <button
+                    type="button"
+                    className={proficiencyLevel === level ? "level-choice active" : "level-choice"}
+                    key={level}
+                    onClick={() => setProficiencyLevel(level)}
+                  >
+                    <strong>{learningLevelLabels[level]}</strong>
+                    <small>{learningLevelDescriptions[level]}</small>
                   </button>
                 ))}
               </div>
