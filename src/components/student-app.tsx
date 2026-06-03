@@ -748,7 +748,7 @@ export function StudentApp() {
         )}
 
         {screen === "story" && <Story lesson={lesson} showZh={showZh} setShowZh={setShowZh} speed={speed} setSpeed={setSpeed} speak={speak} next={() => setScreen(nextWithoutRegressing(lesson.id, "vocab"))} />}
-        {screen === "vocab" && <Vocabulary lesson={lesson} learnedWords={learnedWords} speak={speak} onMark={markVocabulary} />}
+        {screen === "vocab" && <Vocabulary lesson={lesson} learnedWords={learnedWords} speak={speak} next={() => setScreen("listen")} onMark={markVocabulary} />}
         {screen === "listen" && <QuizTask key={`${lesson.id}-listen`} lesson={lesson} skill="listen" questions={listenQuestions} speak={speak} state={quizStateFor("listen")} onStateChange={(nextState) => updateQuizState("listen", nextState)} helpUsed={hasUsedHelp("listen")} onHelp={(question) => showOwlHelp("listen", question.answer, `這題可以聽關鍵字：${question.audio || question.prompt}`)} onAnswer={answerQuestion} onDone={() => { completeSkill("listen"); setScreen("speak"); }} />}
         {screen === "speak" && <SpeakTask lesson={lesson} speak={speak} state={speakStateFor()} onStateChange={updateSpeakState} helpUsed={hasUsedHelp("speak")} onHelp={(answer) => showOwlHelp("speak", answer, "先聽一次，再跟著 Owl 老師慢慢讀。")} onAnswer={answerPractice} onDone={() => { completeSkill("speak"); setScreen("read"); }} />}
         {screen === "read" && <QuizTask key={`${lesson.id}-read`} lesson={lesson} skill="read" questions={readQuestions} speak={speak} state={quizStateFor("read")} onStateChange={(nextState) => updateQuizState("read", nextState)} helpUsed={hasUsedHelp("read")} onHelp={(question) => showOwlHelp("read", question.answer, "閱讀時先找題目中的關鍵字，再回故事找相同或相近的意思。")} onAnswer={answerQuestion} onDone={() => { completeSkill("read"); setScreen("write"); }} />}
@@ -792,10 +792,10 @@ function getLessonUnlockState(item: Lesson, index: number, lessons: Lesson[], co
 
 function sortCourseMapLessons(items: Lesson[]) {
   return [...items].sort((a, b) => {
-    const sortDiff = (a.sortOrder || 999000) - (b.sortOrder || 999000);
-    if (sortDiff) return sortDiff;
     const levelDiff = a.level - b.level;
     if (levelDiff) return levelDiff;
+    const sortDiff = (a.sortOrder || 999000) - (b.sortOrder || 999000);
+    if (sortDiff) return sortDiff;
     return a.title.localeCompare(b.title);
   });
 }
@@ -1262,10 +1262,11 @@ function Story({ lesson, showZh, setShowZh, speed, setSpeed, speak, next }: {
   );
 }
 
-function Vocabulary({ lesson, learnedWords, speak, onMark }: {
+function Vocabulary({ lesson, learnedWords, speak, next, onMark }: {
   lesson: Lesson;
   learnedWords: (Word & { lessonTitle: string; lessonId: string })[];
   speak: (text: string) => void;
+  next: () => void;
   onMark: (word: string, known: boolean) => void;
 }) {
   const [marked, setMarked] = useState<Record<string, "known" | "review">>({});
@@ -1314,31 +1315,50 @@ function Vocabulary({ lesson, learnedWords, speak, onMark }: {
           </article>
         ))}
       </div>
-      {showWordBank && learnedWords.length > 0 && (
-        <>
-          <div className="section-title">
-            <div>
-              <h3>我的單詞收藏冊</h3>
-              <p className="muted">只顯示你之前做過的單元單字，還沒學過的單元不會出現在這裡。</p>
+
+      <article className="panel vocab-next-panel">
+        <div>
+          <span className={allReady ? "pill" : "pill blue"}>{allReady ? "單字任務完成" : "先完成本課單字"}</span>
+          <h3>下一站：聽力任務</h3>
+          <p className="muted">完成本單元所有單字後，就可以聽 Owl 老師出題，繼續這一關的冒險。</p>
+        </div>
+        <button className="btn primary adventure-btn" disabled={!allReady} type="button" onClick={next}>
+          開始聽力任務
+        </button>
+      </article>
+
+      {showWordBank && (
+        <div className="word-bank-backdrop" role="dialog" aria-modal="true" aria-label="我的單詞收藏冊" onClick={() => setShowWordBank(false)}>
+          <article className="word-bank-page" onClick={(event) => event.stopPropagation()}>
+            <div className="section-title">
+              <div>
+                <p className="eyebrow">Word Collection</p>
+                <h3>我的單詞收藏冊</h3>
+                <p className="muted">只顯示你之前做過的單元單字，還沒學過的單元不會出現在這裡。</p>
+              </div>
+              <div className="admin-actions">
+                <span className="pill blue">{learnedWords.length} 個已學單字</span>
+                <button className="btn secondary" type="button" onClick={() => setShowWordBank(false)}>收起收藏冊</button>
+              </div>
             </div>
-            <span className="pill blue">{learnedWords.length} 個已學單字</span>
-          </div>
-          <div className="word-bank">
-            {learnedWords.map((item) => (
-              <button className="word-chip" key={`${item.lessonId}-${item.word}`} onClick={() => speak(item.word)}>
-                <span>{item.image}</span>
-                <strong>{item.word}</strong>
-                <small>{item.meaning} · {item.lessonTitle}</small>
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-      {showWordBank && learnedWords.length === 0 && (
-        <article className="panel">
-          <h3>單詞收藏冊還是空的</h3>
-          <p className="muted">完成一些單元後，之前學過的單字會出現在這裡。</p>
-        </article>
+            {learnedWords.length > 0 ? (
+              <div className="word-bank">
+                {learnedWords.map((item) => (
+                  <button className="word-chip" key={`${item.lessonId}-${item.word}`} onClick={() => speak(item.word)}>
+                    <span>{item.image}</span>
+                    <strong>{item.word}</strong>
+                    <small>{item.meaning} · {item.lessonTitle}</small>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-state">
+                <strong>單詞收藏冊還是空的</strong>
+                <p className="muted">完成一些單元後，之前學過的單字會出現在這裡。</p>
+              </div>
+            )}
+          </article>
+        </div>
       )}
     </section>
   );
