@@ -5,7 +5,7 @@ import { Headphones, LogOut, Mic, QrCode, Sparkles, Star, UserRound } from "luci
 import { appLessons } from "@/data/lessons";
 import { isSupabaseReady, signInStudent, signOut, signUpStudent } from "@/lib/auth";
 import { mergePublishedLessons } from "@/lib/course-drafts";
-import { canStudentSeeLesson, defaultLearningLevel, learningLevelDescriptions, learningLevelLabels } from "@/lib/learning-levels";
+import { canStudentSeeLesson, defaultLearningLevel, learningLevelDescriptions, learningLevelLabels, lessonDifficulty } from "@/lib/learning-levels";
 import { supabase } from "@/lib/supabase";
 import {
   clearStudentSession,
@@ -470,9 +470,14 @@ function buildLessonPracticeQuestions(lesson: Lesson, skill: "listen" | "read"):
   const meanings = unique([...words.map((item) => item.meaning), ...appLessons.flatMap((item) => item.words.map((word) => word.meaning))].filter(Boolean));
   const wordTexts = unique([...words.map((item) => item.word), ...appLessons.flatMap((item) => item.words.map((word) => word.word))].filter(Boolean));
   const sentences = unique(lesson.sentences.map((item) => item.en).filter(Boolean));
+  const difficulty = lessonDifficulty(lesson);
+  const firstWord = words[0];
+  const secondWord = words[1] || firstWord;
+  const thirdWord = words[2] || firstWord;
+  const storyText = sentences.join(" ");
 
   if (skill === "listen") {
-    const wordQuestions = words.slice(0, 4).map((word, index) => ({
+    const wordQuestions = words.slice(0, difficulty === "beginner" ? 4 : 2).map((word, index) => ({
       id: `${lesson.id}-generated-listen-word-${index + 1}`,
       skill,
       type: "choice" as const,
@@ -491,10 +496,33 @@ function buildLessonPracticeQuestions(lesson: Lesson, skill: "listen" | "read"):
       options: fillOptions(sentence, sentences.length > 1 ? sentences : words.map((item) => item.example).filter(Boolean)),
       audio: sentence
     };
-    return [...wordQuestions, sentenceQuestion].slice(0, 5);
+    const storyDetailQuestion: ChoiceQuestion = {
+      id: `${lesson.id}-generated-listen-story-detail`,
+      skill,
+      type: "choice",
+      prompt: difficulty === "advanced" ? "聽短文，選出正確細節" : "聽小故事，選出故事裡出現的內容",
+      answer: secondWord.word,
+      options: fillOptions(secondWord.word, wordTexts),
+      audio: storyText || sentence
+    };
+    const listenGrammarQuestion: ChoiceQuestion = {
+      id: `${lesson.id}-generated-listen-grammar`,
+      skill,
+      type: "choice",
+      prompt: "聽句子，選出正確的 be 動詞",
+      answer: "is",
+      options: ["am", "is", "are", "be"],
+      audio: `${firstWord.word} is important.`
+    };
+    return [
+      ...wordQuestions,
+      sentenceQuestion,
+      ...(difficulty !== "beginner" ? [storyDetailQuestion] : []),
+      ...(difficulty === "advanced" ? [listenGrammarQuestion] : [])
+    ].slice(0, 5);
   }
 
-  const wordMeaningQuestions = words.slice(0, 3).map((word, index) => ({
+  const wordMeaningQuestions = words.slice(0, difficulty === "beginner" ? 3 : 2).map((word, index) => ({
     id: `${lesson.id}-generated-read-word-${index + 1}`,
     skill,
     type: "choice" as const,
@@ -515,11 +543,47 @@ function buildLessonPracticeQuestions(lesson: Lesson, skill: "listen" | "read"):
     id: `${lesson.id}-generated-read-story`,
     skill,
     type: "choice",
-    prompt: `What is this story mainly about?`,
+    prompt: difficulty === "advanced" ? "What is the passage mainly about?" : `What is this story mainly about?`,
     answer: lesson.topic,
     options: fillOptions(lesson.topic, unique([lesson.topic, ...appLessons.map((item) => item.topic)]))
   };
-  return [...wordMeaningQuestions, sentenceQuestion, storyQuestion].slice(0, 5);
+  const sequenceQuestion: ChoiceQuestion = {
+    id: `${lesson.id}-generated-read-sequence`,
+    skill,
+    type: "choice",
+    prompt: "Which sentence happens first in the story?",
+    answer: sentences[0] || exampleWord.example,
+    options: fillOptions(sentences[0] || exampleWord.example, sentences)
+  };
+  const inferenceQuestion: ChoiceQuestion = {
+    id: `${lesson.id}-generated-read-inference`,
+    skill,
+    type: "choice",
+    prompt: "What can we learn from the story?",
+    answer: `It is about ${lesson.topic.toLowerCase()}.`,
+    options: fillOptions(`It is about ${lesson.topic.toLowerCase()}.`, [
+      `It is about ${lesson.topic.toLowerCase()}.`,
+      "It is only about lunch.",
+      "It says school is closed.",
+      "It says nobody helps."
+    ])
+  };
+  const grammarQuestion: ChoiceQuestion = {
+    id: `${lesson.id}-generated-read-grammar`,
+    skill,
+    type: "choice",
+    prompt: `Choose the correct sentence.`,
+    answer: `${firstWord.word} is important.`,
+    options: [
+      `${firstWord.word} is important.`,
+      `${firstWord.word} are important.`,
+      `${firstWord.word} am important.`,
+      `${firstWord.word} be important.`
+    ]
+  };
+  if (difficulty === "beginner") return [...wordMeaningQuestions, sentenceQuestion, storyQuestion].slice(0, 5);
+  if (difficulty === "intermediate") return [...wordMeaningQuestions, sequenceQuestion, sentenceQuestion, storyQuestion].slice(0, 5);
+  return [storyQuestion, sequenceQuestion, inferenceQuestion, grammarQuestion, ...wordMeaningQuestions].slice(0, 5);
 }
 
 function unique(items: string[]) {
@@ -530,6 +594,22 @@ function fillOptions(answer: string, pool: string[]) {
   const base = unique([answer, ...pool.filter((item) => item !== answer)]);
   const fallback = ["cat", "book", "happy", "jump"];
   return unique([...base, ...fallback]).slice(0, 4);
+}
+
+function shuffleQuestionOptions(options: string[], answer: string, seed: string) {
+  const padded = fillOptions(answer, unique([answer, ...options]));
+  return padded
+    .map((option, index) => ({ option, score: seededScore(`${seed}-${option}-${index}`) }))
+    .sort((a, b) => a.score - b.score)
+    .map((item) => item.option);
+}
+
+function seededScore(value: string) {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) % 1000003;
+  }
+  return hash;
 }
 
 function StudentLogin({ onEnter }: { onEnter: (student: StudentSession) => Promise<void> }) {
@@ -700,13 +780,26 @@ function Story({ lesson, showZh, setShowZh, speed, setSpeed, speak, next }: {
   speak: (text: string) => void;
   next: () => void;
 }) {
+  const difficulty = lessonDifficulty(lesson);
+  const storyText = lesson.sentences.map((line) => line.en).join(" ");
+  const zhText = lesson.sentences.map((line) => line.zh).filter(Boolean).join("");
   return (
     <section className="grid two">
       <article className="panel">
         <div className="section-title">
           <h3>{lesson.cover} {lesson.title}</h3>
-          <span className="pill">{lesson.topic}</span>
+          <span className="pill">{learningLevelLabels[difficulty]} · {lesson.topic}</span>
         </div>
+        {difficulty !== "beginner" && (
+          <div className="story-reading-card">
+            <p className="eyebrow">{difficulty === "advanced" ? "Reading Passage" : "Mini Story"}</p>
+            <h3>{storyText}</h3>
+            {showZh && <p className="muted">{zhText}</p>}
+            <button className="btn secondary" onClick={() => speak(storyText)}>
+              播放完整{difficulty === "advanced" ? "短文" : "故事"}
+            </button>
+          </div>
+        )}
         {lesson.sentences.map((line, index) => (
           <div className="story-line" key={line.en}>
             <div className="pic">{line.image}</div>
@@ -793,6 +886,10 @@ function QuizTask({ lesson, skill, questions, speak, onAnswer, onDone }: {
   const [feedback, setFeedback] = useState("");
   const [picked, setPicked] = useState("");
   const question = questions[index];
+  const displayedOptions = useMemo(
+    () => question ? shuffleQuestionOptions(question.options, question.answer, question.id) : [],
+    [question]
+  );
 
   if (!question) {
     return (
@@ -846,7 +943,7 @@ function QuizTask({ lesson, skill, questions, speak, onAnswer, onDone }: {
             </div>
           )}
           <div className="options">
-            {question.options.map((option) => (
+            {displayedOptions.map((option) => (
               <button
                 key={option}
                 className={`option ${picked && option === question.answer ? "correct" : ""} ${picked === option && option !== question.answer ? "wrong" : ""}`}

@@ -96,7 +96,7 @@ function buildListeningQuestions(words: Word[], lessonId: string): ChoiceQuestio
       type: "choice",
       prompt: `聽單字，選出意思：${word.word}`,
       answer: word.meaning,
-      options: [word.meaning, ...distractors].filter(Boolean),
+      options: rotateOptions([word.meaning, ...distractors].filter(Boolean), index),
       audio: word.word
     };
   });
@@ -106,6 +106,7 @@ function buildReadingQuestions(sentences: StorySentence[], words: Word[], lesson
   const firstWord = words[0];
   const secondWord = words[1] || firstWord;
   const firstSentence = sentences[0];
+  const secondSentence = sentences[1] || firstSentence;
   const questions: ChoiceQuestion[] = [];
   if (firstWord) {
     questions.push({
@@ -114,7 +115,7 @@ function buildReadingQuestions(sentences: StorySentence[], words: Word[], lesson
       type: "choice",
       prompt: `Which word means「${firstWord.meaning}」?`,
       answer: firstWord.word,
-      options: words.slice(0, 4).map((item) => item.word)
+      options: rotateOptions(words.slice(0, 4).map((item) => item.word), 1)
     });
   }
   if (secondWord) {
@@ -124,10 +125,37 @@ function buildReadingQuestions(sentences: StorySentence[], words: Word[], lesson
       type: "choice",
       prompt: `Choose the sentence with "${secondWord.word}".`,
       answer: secondWord.example,
-      options: [secondWord.example, firstSentence?.en || `I see ${secondWord.word}.`, `This is ${secondWord.word}.`, `I like ${secondWord.word}.`]
+      options: rotateOptions([secondWord.example, firstSentence?.en || `I see ${secondWord.word}.`, `This is ${secondWord.word}.`, `I like ${secondWord.word}.`], 2)
+    });
+  }
+  if (sentences.length >= 3) {
+    questions.push({
+      id: `${lessonId}-auto-read-sequence`,
+      skill: "read",
+      type: "choice",
+      prompt: "Which sentence happens first?",
+      answer: firstSentence.en,
+      options: rotateOptions(sentences.slice(0, 4).map((item) => item.en), 3)
+    });
+  }
+  if (firstWord) {
+    questions.push({
+      id: `${lessonId}-auto-read-grammar`,
+      skill: "read",
+      type: "choice",
+      prompt: "Choose the correct grammar sentence.",
+      answer: `${firstWord.word} is important.`,
+      options: rotateOptions([`${firstWord.word} is important.`, `${firstWord.word} are important.`, `${firstWord.word} am important.`, `${firstWord.word} be important.`], 1)
     });
   }
   return questions;
+}
+
+function rotateOptions(options: string[], amount: number) {
+  const clean = Array.from(new Set(options.filter(Boolean)));
+  if (!clean.length) return clean;
+  const offset = amount % clean.length;
+  return [...clean.slice(offset), ...clean.slice(0, offset)];
 }
 
 export function mergePublishedLessons(baseLessons: Lesson[], drafts: CourseDraft[]) {
