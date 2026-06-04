@@ -1554,6 +1554,84 @@ function Story({ lesson, showZh, setShowZh, speed, setSpeed, speak, next }: {
   );
 }
 
+const wordPhotoTerms: Record<string, string> = {
+  zoo: "zoo animals",
+  lion: "lion animal",
+  monkey: "monkey animal",
+  big: "big object",
+  funny: "funny child",
+  jump: "child jumping",
+  apple: "apple fruit",
+  bread: "bread food",
+  milk: "milk glass",
+  rice: "rice bowl",
+  lunch: "lunch box",
+  table: "table classroom",
+  classroom: "classroom",
+  teacher: "teacher classroom",
+  book: "children book",
+  pencil: "pencil",
+  write: "child writing",
+  family: "family",
+  mom: "mother cooking",
+  dad: "father reading",
+  grandma: "grandmother",
+  happy: "happy child",
+  sad: "sad child",
+  angry: "angry child",
+  scared: "scared child",
+  friend: "children friends",
+  share: "children sharing",
+  clean: "cleaning room",
+  help: "helping friend",
+  helpful: "helping friend",
+  difficult: "puzzle challenge",
+  carry: "carrying books",
+  problem: "thinking child",
+  together: "teamwork children",
+  kind: "kind child",
+  solve: "solving puzzle",
+  science: "science fair",
+  water: "saving water",
+  library: "library books",
+  garden: "garden plants",
+  stage: "school stage",
+  talent: "talent show",
+  practice: "student practicing",
+  nervous: "nervous student",
+  plan: "student planning",
+  project: "school project",
+  bag: "school bag",
+  smile: "child smiling",
+  rain: "rainy day",
+  birthday: "birthday party",
+  color: "color pencils",
+  body: "children exercise"
+};
+
+function wordPhotoUrl(word: Word, lesson: Lesson) {
+  const key = word.word.toLowerCase();
+  const term = wordPhotoTerms[key] || `${word.word} ${lesson.topic} english learning`;
+  return `https://source.unsplash.com/960x640/?${encodeURIComponent(term)}`;
+}
+
+function WordPhoto({ word, lesson }: { word: Word; lesson: Lesson }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return (
+      <div className="word-photo-frame word-photo-fallback">
+        <span>{word.image}</span>
+        <strong>{word.word}</strong>
+      </div>
+    );
+  }
+  return (
+    <div className="word-photo-frame">
+      <img src={wordPhotoUrl(word, lesson)} alt={`${word.word} - ${word.meaning}`} onError={() => setFailed(true)} />
+    </div>
+  );
+}
+
 function Vocabulary({ lesson, learnedWords, speak, questMode = false, next, onMark }: {
   lesson: Lesson;
   learnedWords: (Word & { lessonTitle: string; lessonId: string })[];
@@ -1565,12 +1643,20 @@ function Vocabulary({ lesson, learnedWords, speak, questMode = false, next, onMa
   const [marked, setMarked] = useState<Record<string, "known" | "review">>({});
   const [heard, setHeard] = useState<Record<string, boolean>>({});
   const [showWordBank, setShowWordBank] = useState(false);
+  const [wordIndex, setWordIndex] = useState(0);
+  const currentWord = lesson.words[wordIndex] || lesson.words[0];
   const allReady = lesson.words.length > 0 && lesson.words.every((item) => heard[item.word] && marked[item.word]);
+  const currentReady = currentWord ? Boolean(heard[currentWord.word] && marked[currentWord.word]) : false;
+  const canGoNextWord = !questMode || currentReady || wordIndex < lesson.words.length - 1 && Boolean(marked[lesson.words[wordIndex + 1]?.word]);
 
   function mark(word: string, value: "known" | "review") {
     if (!heard[word]) return;
     setMarked((current) => ({ ...current, [word]: value }));
     onMark?.(word, value === "known");
+  }
+
+  function moveWord(direction: -1 | 1) {
+    setWordIndex((current) => Math.min(Math.max(current + direction, 0), lesson.words.length - 1));
   }
 
   return (
@@ -1587,31 +1673,53 @@ function Vocabulary({ lesson, learnedWords, speak, questMode = false, next, onMa
         <div className="admin-actions">
           <span className={allReady ? "pill" : "pill blue"}>{allReady ? "本單元單字已完成" : "正在學習中"}</span>
           <button className="btn secondary" type="button" onClick={() => setShowWordBank((value) => !value)}>
-            {showWordBank ? "收起收藏冊" : "打開單詞收藏冊"}
+            打開單詞收藏冊
           </button>
         </div>
       </div>
-      <div className="grid cards">
-        {lesson.words.map((item) => (
-          <article className="word-card" key={item.word}>
-            <div className="word-card-body">
-              <div className="emoji">{item.image}</div>
-              <span className="pill">{item.level}</span>
-              <strong>{item.word}</strong>
-              <p>{item.meaning} · {item.part}</p>
-              <p className="muted">{item.example}<br />{item.translation}</p>
-              {!heard[item.word] && <p className="muted">先按「發音」，再判斷是否學會。</p>}
-              {marked[item.word] === "known" && <p className="success-text">已記錄：我會了，獲得 1 顆星。</p>}
-              {marked[item.word] === "review" && <p className="form-error">已加入再挑戰，之後可以複習。</p>}
+
+      {currentWord && (
+        <article className="single-word-card">
+          <div className="word-photo-panel">
+            <WordPhoto word={currentWord} lesson={lesson} />
+            <div className="word-progress-strip">
+              {lesson.words.map((item, index) => (
+                <button
+                  type="button"
+                  className={`word-dot ${index === wordIndex ? "active" : ""} ${marked[item.word] ? "done" : ""}`}
+                  key={item.word}
+                  onClick={() => setWordIndex(index)}
+                  aria-label={`前往單字 ${index + 1}`}
+                />
+              ))}
             </div>
-            <div className="btns word-actions">
-              <button className="btn secondary" onClick={() => { speak(item.word); setHeard((current) => ({ ...current, [item.word]: true })); }}>發音</button>
-              <button className="btn ghost" disabled={!heard[item.word]} onClick={() => mark(item.word, "known")}>我會了</button>
-              <button className="btn ghost" disabled={!heard[item.word]} onClick={() => mark(item.word, "review")}>需要複習</button>
+          </div>
+          <div className="word-study-panel">
+            <div className="word-study-top">
+              <span className="pill">{currentWord.level}</span>
+              <span className="pill blue">{wordIndex + 1} / {lesson.words.length}</span>
             </div>
-          </article>
-        ))}
-      </div>
+            <h2>{currentWord.word}</h2>
+            <p className="word-meaning">{currentWord.meaning} · {currentWord.part}</p>
+            <div className="example-box">
+              <strong>{currentWord.example}</strong>
+              <span>{currentWord.translation}</span>
+            </div>
+            {!heard[currentWord.word] && <p className="muted">先按「發音」，聽清楚後再判斷是否學會。</p>}
+            {marked[currentWord.word] === "known" && <p className="success-text">已記錄：我會了，獲得 1 顆星。</p>}
+            {marked[currentWord.word] === "review" && <p className="form-error">已加入再挑戰，之後可以複習。</p>}
+            <div className="btns word-actions single-word-actions">
+              <button className="btn secondary" onClick={() => { speak(currentWord.word); setHeard((current) => ({ ...current, [currentWord.word]: true })); }}>發音</button>
+              <button className="btn ghost" disabled={!heard[currentWord.word]} onClick={() => mark(currentWord.word, "known")}>我會了</button>
+              <button className="btn ghost" disabled={!heard[currentWord.word]} onClick={() => mark(currentWord.word, "review")}>需要複習</button>
+            </div>
+            <div className="word-pager">
+              <button className="btn secondary" disabled={wordIndex === 0} onClick={() => moveWord(-1)}>上一個單字</button>
+              <button className="btn primary" disabled={wordIndex >= lesson.words.length - 1 || !canGoNextWord} onClick={() => moveWord(1)}>下一個單字</button>
+            </div>
+          </div>
+        </article>
+      )}
 
       {questMode && next && (
         <article className="panel vocab-next-panel">
@@ -2338,6 +2446,7 @@ function ScenarioDialogue({
   const [thinking, setThinking] = useState(false);
   const [aiMode, setAiMode] = useState<"unknown" | "ai" | "simple">("unknown");
   const [error, setError] = useState("");
+  const [aiError, setAiError] = useState("");
 
   function startScenario(scenario: DialogueScenario) {
     setActiveScenario(scenario);
@@ -2355,6 +2464,7 @@ function ScenarioDialogue({
     setThinking(true);
     const aiResult = await requestDialogueReply(activeScenario, conversation);
     setAiMode(aiResult.mode);
+    setAiError(aiResult.error || "");
     const nextMessages = [...conversation, { role: "ai" as const, text: aiResult.reply }];
     setMessages(nextMessages);
     setThinking(false);
@@ -2391,6 +2501,7 @@ function ScenarioDialogue({
     setMessages([]);
     setInput("");
     setError("");
+    setAiError("");
   }
 
   if (!activeScenario) {
@@ -2436,6 +2547,12 @@ function ScenarioDialogue({
           </span>
           <button className="btn ghost" type="button" onClick={() => setExitOpen(true)}>退出</button>
         </div>
+        {aiMode === "simple" && aiError && (
+          <div className="ai-mode-warning">
+            <strong>AI 沒有成功啟動，目前正在使用簡易備援回覆。</strong>
+            <span>{aiError}</span>
+          </div>
+        )}
         <div className="dialogue-box">
           {messages.map((message, index) => (
             <div className={`dialogue-message ${message.role}`} key={`${message.role}-${index}`}>
@@ -2494,17 +2611,37 @@ async function requestDialogueReply(scenario: DialogueScenario, messages: Dialog
         messages
       })
     });
-    if (!response.ok) throw new Error("AI API unavailable");
+    if (!response.ok) {
+      const data = await response.json().catch(() => null);
+      const detail = typeof data?.error === "string" ? data.error : `HTTP ${response.status}`;
+      throw new Error(summarizeAiApiError(detail, response.status));
+    }
     const data = await response.json();
     if (typeof data.reply === "string" && data.reply.trim()) {
       return { reply: data.reply.trim(), mode: "ai" as const };
     }
-  } catch {
+  } catch (event) {
     const lastStudentMessage = messages.filter((message) => message.role === "student").at(-1)?.text || "";
-    return { reply: generateDialogueReply(scenario, lastStudentMessage, messages.length), mode: "simple" as const };
+    const error = event instanceof Error ? event.message : "無法連接 AI API。";
+    return { reply: generateDialogueReply(scenario, lastStudentMessage, messages.length), mode: "simple" as const, error };
   }
   const lastStudentMessage = messages.filter((message) => message.role === "student").at(-1)?.text || "";
-  return { reply: generateDialogueReply(scenario, lastStudentMessage, messages.length), mode: "simple" as const };
+  return {
+    reply: generateDialogueReply(scenario, lastStudentMessage, messages.length),
+    mode: "simple" as const,
+    error: "AI 回傳格式沒有 reply，已切回簡易備援。"
+  };
+}
+
+function summarizeAiApiError(raw: string, status?: number) {
+  const text = raw.toLowerCase();
+  if (text.includes("openai_api_key is not configured")) return "Vercel 沒有讀到 OPENAI_API_KEY，請確認環境變數已加到 Production 並重新部署。";
+  if (status === 401 || text.includes("invalid_api_key") || text.includes("incorrect api key")) return "OpenAI API Key 無效或貼錯，請重新建立 Key 後放到 Vercel。";
+  if (status === 429 || text.includes("insufficient_quota") || text.includes("quota")) return "OpenAI 帳號額度不足或付款未啟用，請到 OpenAI Billing 檢查。";
+  if (text.includes("model_not_found") || text.includes("does not exist")) return "OPENAI_MODEL 不能使用或模型名稱錯誤，建議先改成 gpt-4.1-mini。";
+  if (status === 403) return "OpenAI Key 沒有權限使用目前模型，請檢查模型或帳號權限。";
+  if (status) return `AI API 回傳錯誤 HTTP ${status}，請檢查 Vercel 環境變數與 OpenAI 帳號。`;
+  return "無法連接 AI API，已切回簡易備援。";
 }
 
 function generateDialogueReply(scenario: DialogueScenario, studentText: string, turn: number) {
@@ -2519,6 +2656,7 @@ function generateDialogueReply(scenario: DialogueScenario, studentText: string, 
     return scenario.opening;
   }
   if (scenario.id === "hotel-check-in") {
+    if (text.includes("check in") || text.includes("check-in")) return "Sure. Do you have a reservation, or would you like to book a room now?";
     if (text.includes("reservation") || text.includes("book")) return "Great. May I have your full name, please?";
     if (text.includes("no")) return "No problem. Would you like to book a room now?";
     if (text.includes("name") || text.includes("my name is")) return "Thank you. How many nights will you stay?";
@@ -2531,6 +2669,8 @@ function generateDialogueReply(scenario: DialogueScenario, studentText: string, 
     if (text.includes("thank")) return "You are welcome. Your food will be ready soon.";
   }
   if (scenario.id === "school-office") {
+    if (text.includes("eat") || text.includes("food") || text.includes("lunch")) return "This is the school office, but I can help. Do you want to go to the cafeteria?";
+    if (text.includes("help")) return "Sure. Please tell me what you need help with.";
     if (text.includes("teacher")) return "Which teacher are you looking for?";
     if (text.includes("class")) return "Please write your class and name here.";
     if (text.includes("lost")) return "I can help. What did you lose?";
