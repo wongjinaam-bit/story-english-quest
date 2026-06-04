@@ -19,7 +19,7 @@ import {
 } from "@/lib/progress";
 import type { AppAssignment, ChoiceQuestion, CourseDraft, LearningLevel, Lesson, Skill, StudentProgress, StudentSession, Word, WritingTask } from "@/lib/types";
 
-type Screen = "home" | "map" | "story" | "questVocab" | "vocab" | "listen" | "speak" | "read" | "write" | "review" | "progress";
+type Screen = "home" | "map" | "story" | "questVocab" | "vocab" | "listen" | "speak" | "read" | "write" | "dialogue" | "review" | "progress";
 
 type QuizTaskState = {
   index: number;
@@ -41,6 +41,24 @@ type WritingFeedback = {
   title: string;
   notes: string[];
   nextStep: string;
+};
+
+type DialogueMessage = {
+  role: "ai" | "student";
+  text: string;
+};
+
+type DialogueScenario = {
+  id: string;
+  title: string;
+  topic: string;
+  cover: string;
+  role: string;
+  voice: "male" | "female";
+  level: LearningLevel;
+  opening: string;
+  goal: string;
+  sampleReplies: string[];
 };
 
 type WriteTaskState = {
@@ -88,6 +106,7 @@ const navItems: { id: Screen; label: string; icon: string; cuteLabel: string }[]
   { id: "map", label: "課程地圖", icon: "🗺️", cuteLabel: "冒險地圖" },
   { id: "story", label: "故事", icon: "📖", cuteLabel: "故事書" },
   { id: "vocab", label: "單字", icon: "🔤", cuteLabel: "字母卡" },
+  { id: "dialogue", label: "情境對話", icon: "💬", cuteLabel: "AI 對話" },
   { id: "review", label: "再挑戰", icon: "🚩", cuteLabel: "勇氣挑戰" },
   { id: "progress", label: "進度", icon: "🏆", cuteLabel: "星星進度" }
 ];
@@ -121,6 +140,57 @@ const learningLevelRank: Record<LearningLevel, number> = {
 };
 
 const avatars = ["⭐", "🚀", "🌈", "📚", "🎯", "🏆"];
+
+const dialogueScenarios: DialogueScenario[] = [
+  {
+    id: "hotel-check-in",
+    title: "去酒店入住",
+    topic: "Travel",
+    cover: "🏨",
+    role: "Hotel receptionist",
+    voice: "female",
+    level: "intermediate",
+    opening: "Good evening. Welcome to Star Hotel. Do you have a reservation?",
+    goal: "練習入住、姓名、房間、早餐和付款。",
+    sampleReplies: ["May I have your name, please?", "How many nights will you stay?", "Would you like breakfast tomorrow?"]
+  },
+  {
+    id: "restaurant-order",
+    title: "在餐廳點餐",
+    topic: "Food",
+    cover: "🍽️",
+    role: "Restaurant server",
+    voice: "male",
+    level: "beginner",
+    opening: "Hello. Welcome to Sunny Cafe. What would you like to eat?",
+    goal: "練習點餐、飲料、數量和禮貌表達。",
+    sampleReplies: ["Would you like a drink?", "Do you want rice or noodles?", "Anything else?"]
+  },
+  {
+    id: "school-office",
+    title: "到學校辦公室",
+    topic: "School",
+    cover: "🏫",
+    role: "School office teacher",
+    voice: "female",
+    level: "beginner",
+    opening: "Hi. How can I help you today?",
+    goal: "練習問路、請求幫助、找老師。",
+    sampleReplies: ["Which teacher are you looking for?", "What class are you in?", "Please wait here."]
+  },
+  {
+    id: "doctor-visit",
+    title: "看醫生",
+    topic: "Health",
+    cover: "🩺",
+    role: "Doctor",
+    voice: "male",
+    level: "advanced",
+    opening: "Hello. What seems to be the problem today?",
+    goal: "練習描述身體不舒服、時間和建議。",
+    sampleReplies: ["Where does it hurt?", "When did it start?", "You should drink water and rest."]
+  }
+];
 
 function emptyTaskDraft(): StudentTaskDraft {
   return {
@@ -182,6 +252,9 @@ export function StudentApp() {
   const [lockedHint, setLockedHint] = useState<{ id: string; message: string } | null>(null);
   const [mapWorldLevel, setMapWorldLevel] = useState<1 | 2 | 3>(1);
   const [pendingNavigation, setPendingNavigation] = useState<Screen | null>(null);
+  const [activeScenario, setActiveScenario] = useState<DialogueScenario | null>(null);
+  const [dialogueMessages, setDialogueMessages] = useState<DialogueMessage[]>([]);
+  const [dialogueExitOpen, setDialogueExitOpen] = useState(false);
   const studentLearningLevel = defaultLearningLevel(student?.proficiencyLevel);
   const lessons = useMemo(() => {
     if (!student) return allLessons;
@@ -413,11 +486,19 @@ export function StudentApp() {
     });
   }
 
-  function speak(text: string, rate = speed) {
+  function speak(text: string, rate = speed, voiceHint?: "male" | "female") {
     if (!window.speechSynthesis) return;
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = "en-US";
     utterance.rate = rate;
+    const voices = window.speechSynthesis.getVoices();
+    const preferredVoice = voices.find((voice) => {
+      const name = voice.name.toLowerCase();
+      if (voiceHint === "female") return name.includes("female") || name.includes("zira") || name.includes("samantha") || name.includes("jenny");
+      if (voiceHint === "male") return name.includes("male") || name.includes("david") || name.includes("guy") || name.includes("daniel");
+      return false;
+    });
+    if (preferredVoice) utterance.voice = preferredVoice;
     window.speechSynthesis.cancel();
     window.speechSynthesis.speak(utterance);
   }
@@ -830,10 +911,11 @@ export function StudentApp() {
         {screen === "story" && <Story lesson={lesson} showZh={showZh} setShowZh={setShowZh} speed={speed} setSpeed={setSpeed} speak={speak} next={() => setScreen(nextWithoutRegressing(lesson.id, "questVocab"))} />}
         {screen === "questVocab" && <Vocabulary lesson={lesson} learnedWords={learnedWords} speak={speak} questMode next={() => setScreen("listen")} onMark={markVocabulary} />}
         {screen === "vocab" && <Vocabulary lesson={lesson} learnedWords={learnedWords} speak={speak} />}
-        {screen === "listen" && <QuizTask key={`${lesson.id}-listen`} lesson={lesson} skill="listen" questions={listenQuestions} speak={speak} state={quizStateFor("listen")} onStateChange={(nextState) => updateQuizState("listen", nextState)} helpUsed={hasUsedHelp("listen")} onHelp={(question) => showOwlHelp("listen", question.answer, `這題可以聽關鍵字：${question.audio || question.prompt}`)} onAnswer={answerQuestion} onDone={() => { completeSkill("listen"); setScreen("speak"); }} />}
-        {screen === "speak" && <SpeakTask lesson={lesson} speak={speak} state={speakStateFor()} onStateChange={updateSpeakState} helpUsed={hasUsedHelp("speak")} onHelp={(answer) => showOwlHelp("speak", answer, "先聽一次，再跟著 Owl 老師慢慢讀。")} onAnswer={answerPractice} onDone={() => { completeSkill("speak"); setScreen("read"); }} />}
-        {screen === "read" && <QuizTask key={`${lesson.id}-read`} lesson={lesson} skill="read" questions={readQuestions} speak={speak} state={quizStateFor("read")} onStateChange={(nextState) => updateQuizState("read", nextState)} helpUsed={hasUsedHelp("read")} onHelp={(question) => showOwlHelp("read", question.answer, "閱讀時先找題目中的關鍵字，再回故事找相同或相近的意思。")} onAnswer={answerQuestion} onDone={() => { completeSkill("read"); setScreen("write"); }} />}
-        {screen === "write" && <WriteTask lesson={lesson} state={writeStateFor()} onStateChange={updateWriteState} helpUsed={hasUsedHelp("write")} onHelp={(answer) => showOwlHelp("write", answer, "這是本單元寫作求助答案。看完後再自己輸入一次。")} onAnswer={answerPractice} onDone={() => { completeSkill("write"); setScreen("progress"); }} />}
+        {screen === "listen" && <QuizTask key={`${lesson.id}-listen`} lesson={lesson} skill="listen" questions={listenQuestions} speak={speak} state={quizStateFor("listen")} onStateChange={(nextState) => updateQuizState("listen", nextState)} helpUsed={hasUsedHelp("listen")} onHelp={(question) => showOwlHelp("listen", question.answer, `正確答案：${question.answer}`)} onAnswer={answerQuestion} onBack={() => setScreen("questVocab")} onDone={() => { completeSkill("listen"); setScreen("speak"); }} />}
+        {screen === "speak" && <SpeakTask lesson={lesson} speak={speak} state={speakStateFor()} onStateChange={updateSpeakState} helpUsed={hasUsedHelp("speak")} onHelp={(answer) => showOwlHelp("speak", answer, `正確朗讀句：${answer}`)} onAnswer={answerPractice} onBack={() => setScreen("listen")} onDone={() => { completeSkill("speak"); setScreen("read"); }} />}
+        {screen === "read" && <QuizTask key={`${lesson.id}-read`} lesson={lesson} skill="read" questions={readQuestions} speak={speak} state={quizStateFor("read")} onStateChange={(nextState) => updateQuizState("read", nextState)} helpUsed={hasUsedHelp("read")} onHelp={(question) => showOwlHelp("read", question.answer, `正確答案：${question.answer}`)} onAnswer={answerQuestion} onBack={() => setScreen("speak")} onDone={() => { completeSkill("read"); setScreen("write"); }} />}
+        {screen === "write" && <WriteTask lesson={lesson} state={writeStateFor()} onStateChange={updateWriteState} helpUsed={hasUsedHelp("write")} onHelp={(answer) => showOwlHelp("write", answer, `正確答案：${answer}`)} onAnswer={answerPractice} onBack={() => setScreen("read")} onDone={() => { completeSkill("write"); setScreen("progress"); }} />}
+        {screen === "dialogue" && <ScenarioDialogue scenarios={dialogueScenarios} activeScenario={activeScenario} setActiveScenario={setActiveScenario} messages={dialogueMessages} setMessages={setDialogueMessages} exitOpen={dialogueExitOpen} setExitOpen={setDialogueExitOpen} studentId={student.id} speak={speak} />}
         {screen === "review" && <Review progress={progress} lessons={allLessons} speak={speak} onAnswer={answerReview} />}
         {screen === "progress" && <Progress progress={progress} student={student} />}
       </main>
@@ -1335,6 +1417,7 @@ function titleFor(screen: Screen) {
     speak: "口說任務",
     read: "閱讀任務",
     write: "寫作任務",
+    dialogue: "情境對話",
     review: "再挑戰",
     progress: "學習進度"
   };
@@ -1507,7 +1590,7 @@ function Vocabulary({ lesson, learnedWords, speak, questMode = false, next, onMa
   );
 }
 
-function QuizTask({ lesson, skill, questions, speak, state, onStateChange, helpUsed, onHelp, onAnswer, onDone }: {
+function QuizTask({ lesson, skill, questions, speak, state, onStateChange, helpUsed, onHelp, onAnswer, onBack, onDone }: {
   lesson: Lesson;
   skill: Skill;
   questions: ChoiceQuestion[];
@@ -1517,6 +1600,7 @@ function QuizTask({ lesson, skill, questions, speak, state, onStateChange, helpU
   helpUsed: boolean;
   onHelp: (question: ChoiceQuestion) => void;
   onAnswer: (question: ChoiceQuestion, answer: string) => boolean;
+  onBack?: () => void;
   onDone: () => void;
 }) {
   const { index, feedback, picked } = state;
@@ -1564,6 +1648,7 @@ function QuizTask({ lesson, skill, questions, speak, state, onStateChange, helpU
         <div className="section-title">
           <h3>{taskName(skill)} · {index + 1}/{questions.length}</h3>
           <div className="admin-actions">
+            {onBack && <button className="btn ghost" type="button" onClick={onBack}>上一頁</button>}
             <span className="pill">{lesson.title}</span>
             <button className="btn owl-help-btn" type="button" disabled={helpUsed || Boolean(picked)} onClick={() => onHelp(question)}>
               {helpUsed ? "已用求助" : "Owl 求助"}
@@ -1606,7 +1691,7 @@ function QuizTask({ lesson, skill, questions, speak, state, onStateChange, helpU
   );
 }
 
-function SpeakTask({ lesson, speak, state, onStateChange, helpUsed, onHelp, onAnswer, onDone }: {
+function SpeakTask({ lesson, speak, state, onStateChange, helpUsed, onHelp, onAnswer, onBack, onDone }: {
   lesson: Lesson;
   speak: (text: string, rate?: number) => void;
   state: SpeakTaskState;
@@ -1614,6 +1699,7 @@ function SpeakTask({ lesson, speak, state, onStateChange, helpUsed, onHelp, onAn
   helpUsed: boolean;
   onHelp: (answer: string) => void;
   onAnswer: (skill: Skill, label: string, correct: boolean, answer: string, correctAnswer: string) => void;
+  onBack?: () => void;
   onDone: () => void;
 }) {
   const { done, heard, tries, transcripts = {}, scores = {}, feedback = {} } = state;
@@ -1673,6 +1759,7 @@ function SpeakTask({ lesson, speak, state, onStateChange, helpUsed, onHelp, onAn
         <div className="section-title">
           <h3>Speak 口說任務</h3>
           <div className="admin-actions">
+            {onBack && <button className="btn ghost" type="button" onClick={onBack}>上一頁</button>}
             <span className="pill">AI 發音檢查</span>
             <button className="btn owl-help-btn" type="button" disabled={helpUsed || !nextTask} onClick={() => nextTask && onHelp(nextTask.target)}>
               {helpUsed ? "已用求助" : "Owl 求助"}
@@ -1818,13 +1905,14 @@ function buildSpeechFeedback(target: string, transcript: string, score: number) 
   return "再試一次。句子聽起來接近，但咬字還不夠清楚，請放慢速度。";
 }
 
-function WriteTask({ lesson, state, onStateChange, helpUsed, onHelp, onAnswer, onDone }: {
+function WriteTask({ lesson, state, onStateChange, helpUsed, onHelp, onAnswer, onBack, onDone }: {
   lesson: Lesson;
   state: WriteTaskState;
   onStateChange: (state: WriteTaskState) => void;
   helpUsed: boolean;
   onHelp: (answer: string) => void;
   onAnswer: (skill: Skill, label: string, correct: boolean, answer: string, correctAnswer: string) => void;
+  onBack?: () => void;
   onDone: () => void;
 }) {
   const safeIndex = Math.min(state.index || 0, Math.max(lesson.write.length - 1, 0));
@@ -1849,6 +1937,7 @@ function WriteTask({ lesson, state, onStateChange, helpUsed, onHelp, onAnswer, o
         <div className="section-title">
           <h3>Write 寫作任務 · {safeIndex + 1}/{lesson.write.length}</h3>
           <div className="admin-actions">
+            {onBack && <button className="btn ghost" type="button" onClick={onBack}>上一頁</button>}
             <span className="pill">由簡到難</span>
             <button className="btn owl-help-btn" type="button" disabled={helpUsed || !task || Boolean(checked[task.id])} onClick={() => task && onHelp(task.answerHint.trim())}>
               {helpUsed ? "已用求助" : "Owl 求助"}
@@ -1870,13 +1959,17 @@ function WriteTask({ lesson, state, onStateChange, helpUsed, onHelp, onAnswer, o
               ))}
             </div>
             <p className="eyebrow">{task.prompt}</p>
-            <h3>{task.starter}</h3>
-            <p className="muted">提示：{friendlyWritingHint(task, lesson)}</p>
+            <h3>用英文表達：{writingMeaningHint(task, lesson)}</h3>
+            <p className="muted">句型線索：{task.starter.replace("____", "______")}。不用背原文，只要意思合理。</p>
+            <div className="writing-meaning-card">
+              <strong>先想中文意思</strong>
+              <p>{friendlyWritingHint(task, lesson)}</p>
+            </div>
             <div className="field">
-              <textarea rows={4} placeholder="在這裡寫英文句子，不用怕錯，提交後會看到正確答案。" value={answers[task.id] || ""} onChange={(event) => setTaskState({ answers: { ...answers, [task.id]: event.target.value } })} />
+              <textarea rows={4} placeholder="在這裡寫英文，可以寫完整句子或關鍵答案。提交後會看到正確答案。" value={answers[task.id] || ""} onChange={(event) => setTaskState({ answers: { ...answers, [task.id]: event.target.value } })} />
             </div>
             <div className="btns">
-              <button className="btn ghost" disabled={!answers[task.id]?.trim()} onClick={() => {
+              <button className="btn ghost" onClick={() => {
                 setTaskState({ aiTips: { ...aiTips, [task.id]: getSimpleWritingFeedback(answers[task.id] || "", task, lesson) } });
               }}>AI 小提示</button>
               <button className="btn secondary" disabled={!answers[task.id]?.trim() || Boolean(checked[task.id])} onClick={() => {
@@ -1905,12 +1998,13 @@ function WriteTask({ lesson, state, onStateChange, helpUsed, onHelp, onAnswer, o
           </div>
         )}
       </article>
-      <aside className="panel">
-        <h3>AI 寫作小老師</h3>
-        <p className="muted">簡單版 AI 會先用規則幫學生看句子，給鼓勵和方向，不會直接代寫答案。</p>
-        <div className="hint-board">
-          {lesson.words.slice(0, 6).map((word) => (
-            <span key={word.word}>{word.image} {word.part}</span>
+      <aside className="panel writing-side-panel">
+        <h3>寫作支援</h3>
+        <p className="muted">可以按上一頁回到閱讀、口說、聽力、單字和故事，不會清空已寫內容。</p>
+        <div className="story-mini-box">
+          <strong>本課故事提醒</strong>
+          {lesson.sentences.slice(0, 3).map((line) => (
+            <p key={line.en}>{line.en}<br /><span>{line.zh}</span></p>
           ))}
         </div>
       </aside>
@@ -1937,33 +2031,19 @@ function getSimpleWritingFeedback(answer: string, task: WritingTask, lesson: Les
   const clean = answer.trim();
   const lower = clean.toLowerCase();
   const words = clean.match(/[a-zA-Z]+/g) || [];
-  const usedLessonWords = lesson.words.filter((word) => lower.includes(word.word.toLowerCase()));
+  const likelyAnswers = task.answerHint.split("/").map((item) => item.trim()).filter(Boolean);
+  const likelyMeanings = likelyAnswers
+    .map((answer) => lesson.words.find((word) => word.word.toLowerCase() === answer.toLowerCase())?.meaning)
+    .filter(Boolean);
   const notes: string[] = [];
 
-  if (words.length >= 5) {
-    notes.push("句子內容比較完整，有開始表達想法。");
-  } else if (words.length >= 2) {
-    notes.push("你已經寫出關鍵字，可以再補一點細節。");
+  if (!clean) {
+    notes.push(`這句中文大概是：${writingMeaningHint(task, lesson)}`);
+    notes.push(likelyMeanings.length ? `答案的中文意思接近：「${likelyMeanings.join(" / ")}」。` : "先想想空格要表達的人、物品、動作或感覺。");
+  } else if (words.length >= 3) {
+    notes.push("你已經寫出英文了。現在檢查它是否符合這句中文意思。");
   } else {
-    notes.push("先寫一個簡短句子也可以，例如加入人物、動作或物品。");
-  }
-
-  if (usedLessonWords.length) {
-    notes.push(`有用到本課單字：${usedLessonWords.slice(0, 3).map((word) => word.word).join(", ")}。`);
-  } else {
-    notes.push("試著加入一個本課單字，句子會更貼近故事。");
-  }
-
-  if (/^[A-Z]/.test(clean)) {
-    notes.push("開頭有大寫，格式很好。");
-  } else {
-    notes.push("英文句子開頭可以用大寫。");
-  }
-
-  if (/[.!?]$/.test(clean)) {
-    notes.push("句尾有標點，讀起來更完整。");
-  } else {
-    notes.push("句尾可以加上句號。");
+    notes.push("可以先寫短一點，不需要背原文，只要意思合理。");
   }
 
   const hasLikelyAnswer = task.answerHint
@@ -1974,25 +2054,213 @@ function getSimpleWritingFeedback(answer: string, task: WritingTask, lesson: Les
 
   return {
     mood: hasLikelyAnswer ? "great" : words.length >= 3 ? "good" : "try",
-    title: hasLikelyAnswer ? "很接近正確答案！" : words.length >= 3 ? "方向不錯，還可以更完整。" : "先完成一個小句子。",
+    title: hasLikelyAnswer ? "很接近正確答案。" : words.length >= 3 ? "方向可以，再對照中文意思。" : "先看中文意思再寫英文。",
     notes,
     nextStep: hasLikelyAnswer
       ? "現在可以按「提交答案」看看結果。"
-      : `再看一次提示：「${friendlyWritingHint(task, lesson)}」`
+      : likelyMeanings.length
+        ? `關鍵意思是「${likelyMeanings.join(" / ")}」，請用英文表達。`
+        : `再看一次句意：「${writingMeaningHint(task, lesson)}」`
   };
 }
 
 function friendlyWritingHint(task: { starter: string; answerHint: string }, lesson: Lesson) {
-  const beforeBlank = task.starter.split("____")[0] || task.starter;
-  const afterBlank = task.starter.split("____")[1] || "";
-  const possibleParts = lesson.words
-    .filter((word) => task.answerHint.toLowerCase().includes(word.word.toLowerCase()))
-    .map((word) => word.part);
-  const partHint = possibleParts.length ? `這裡可能需要 ${Array.from(new Set(possibleParts)).join(" / ")}。` : "先判斷這裡要填人物、物品、動作還是感覺。";
-  const contextHint = beforeBlank || afterBlank
-    ? `留意空格附近的字：「${beforeBlank.trim().slice(-18)} ____ ${afterBlank.trim().slice(0, 18)}」。`
-    : "先看完整句子的意思，再選最自然的字。";
-  return `${contextHint} ${partHint} 不確定時，可以先用本課單字造一個合理句子。`;
+  const relatedWords = task.answerHint
+    .split("/")
+    .map((item) => item.trim().toLowerCase())
+    .map((answer) => lesson.words.find((word) => word.word.toLowerCase() === answer))
+    .filter(Boolean) as Word[];
+  if (relatedWords.length) {
+    return `答案意思接近「${relatedWords.map((word) => word.meaning).join(" / ")}」。請用英文寫出這個意思，不需要和故事原句完全一樣。`;
+  }
+  return `先看中文意思：「${writingMeaningHint(task, lesson)}」。再用英文寫出合理答案。`;
+}
+
+function writingMeaningHint(task: { starter: string; answerHint: string }, lesson: Lesson) {
+  const relatedWords = task.answerHint
+    .split("/")
+    .map((item) => item.trim().toLowerCase())
+    .map((answer) => lesson.words.find((word) => word.word.toLowerCase() === answer))
+    .filter(Boolean) as Word[];
+  const answerMeaning = relatedWords.map((word) => word.meaning).join(" / ");
+  const sentence = task.starter.replace("____", answerMeaning || "這個意思");
+  return sentence || answerMeaning || "把空格的中文意思想清楚，再寫英文。";
+}
+
+function ScenarioDialogue({
+  scenarios,
+  activeScenario,
+  setActiveScenario,
+  messages,
+  setMessages,
+  exitOpen,
+  setExitOpen,
+  studentId,
+  speak
+}: {
+  scenarios: DialogueScenario[];
+  activeScenario: DialogueScenario | null;
+  setActiveScenario: (scenario: DialogueScenario | null) => void;
+  messages: DialogueMessage[];
+  setMessages: (messages: DialogueMessage[]) => void;
+  exitOpen: boolean;
+  setExitOpen: (open: boolean) => void;
+  studentId: string;
+  speak: (text: string, rate?: number, voiceHint?: "male" | "female") => void;
+}) {
+  const [input, setInput] = useState("");
+  const [listening, setListening] = useState(false);
+  const [error, setError] = useState("");
+
+  function startScenario(scenario: DialogueScenario) {
+    setActiveScenario(scenario);
+    const firstMessage = { role: "ai" as const, text: scenario.opening };
+    setMessages([firstMessage]);
+    window.setTimeout(() => speak(scenario.opening, 0.88, scenario.voice), 120);
+  }
+
+  function sendStudentMessage(text: string) {
+    if (!activeScenario || !text.trim()) return;
+    const studentMessage = { role: "student" as const, text: text.trim() };
+    const aiText = generateDialogueReply(activeScenario, text, messages.length);
+    const nextMessages = [...messages, studentMessage, { role: "ai" as const, text: aiText }];
+    setMessages(nextMessages);
+    setInput("");
+    speak(aiText, 0.88, activeScenario.voice);
+  }
+
+  async function useVoiceInput() {
+    setError("");
+    setListening(true);
+    try {
+      const transcript = await listenToStudentSpeech();
+      sendStudentMessage(transcript);
+    } catch (event) {
+      setError(event instanceof Error ? event.message : "沒有成功聽到聲音。");
+    } finally {
+      setListening(false);
+    }
+  }
+
+  function saveHistory() {
+    if (!activeScenario || !messages.length) return;
+    const key = `seq-dialogue-history-${studentId}`;
+    const history = JSON.parse(localStorage.getItem(key) || "[]");
+    localStorage.setItem(key, JSON.stringify([
+      { id: Date.now(), scenarioId: activeScenario.id, title: activeScenario.title, date: new Date().toISOString(), messages },
+      ...history
+    ].slice(0, 20)));
+    closeScenario();
+  }
+
+  function closeScenario() {
+    setExitOpen(false);
+    setActiveScenario(null);
+    setMessages([]);
+    setInput("");
+    setError("");
+  }
+
+  if (!activeScenario) {
+    return (
+      <section className="dialogue-home">
+        <div className="section-title">
+          <div>
+            <h3>AI 情境對話</h3>
+            <p className="muted">選一個生活情境，和 AI 角色用英文聊天。可以打字，也可以用語音回答。</p>
+          </div>
+          <span className="pill blue">獨立練習</span>
+        </div>
+        <div className="grid cards scenario-grid">
+          {scenarios.map((scenario) => (
+            <article className="card scenario-card" key={scenario.id}>
+              <div className="scenario-cover">{scenario.cover}</div>
+              <span className="pill">{learningLevelLabels[scenario.level]}</span>
+              <h3>{scenario.title}</h3>
+              <p>{scenario.topic} · AI 扮演 {scenario.role}</p>
+              <p className="muted">{scenario.goal}</p>
+              <button className="btn primary full" type="button" onClick={() => startScenario(scenario)}>開始對話</button>
+            </article>
+          ))}
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="dialogue-stage">
+      <article className="dialogue-panel">
+        <div className="dialogue-header">
+          <div>
+            <span className="dialogue-avatar">{activeScenario.cover}</span>
+            <div>
+              <p className="eyebrow">{activeScenario.topic}</p>
+              <h3>{activeScenario.title}</h3>
+              <small>AI role: {activeScenario.role}</small>
+            </div>
+          </div>
+          <button className="btn ghost" type="button" onClick={() => setExitOpen(true)}>退出</button>
+        </div>
+        <div className="dialogue-box">
+          {messages.map((message, index) => (
+            <div className={`dialogue-message ${message.role}`} key={`${message.role}-${index}`}>
+              <span>{message.role === "ai" ? activeScenario.cover : "🧑"}</span>
+              <p>{message.text}</p>
+            </div>
+          ))}
+        </div>
+        <div className="dialogue-input-row">
+          <input value={input} onChange={(event) => setInput(event.target.value)} placeholder="Type your English reply..." onKeyDown={(event) => {
+            if (event.key === "Enter") sendStudentMessage(input);
+          }} />
+          <button className="btn secondary" type="button" disabled={listening} onClick={useVoiceInput}>
+            <Mic size={18} /> {listening ? "Listening..." : "語音"}
+          </button>
+          <button className="btn primary" type="button" onClick={() => sendStudentMessage(input)}>送出</button>
+        </div>
+        {error && <p className="form-error">{error}</p>}
+      </article>
+      {exitOpen && (
+        <div className="quest-guard-backdrop" role="dialog" aria-modal="true">
+          <article className="quest-guard-card">
+            <h3>要退出這次情境對話嗎？</h3>
+            <p className="muted">你可以保存成歷史聊天記錄，之後再查看；也可以直接放棄。</p>
+            <div className="btns">
+              <button className="btn primary" type="button" onClick={saveHistory}>保存並退出</button>
+              <button className="btn secondary" type="button" onClick={closeScenario}>不保存退出</button>
+              <button className="btn ghost" type="button" onClick={() => setExitOpen(false)}>繼續對話</button>
+            </div>
+          </article>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function generateDialogueReply(scenario: DialogueScenario, studentText: string, turn: number) {
+  const text = studentText.toLowerCase();
+  if (/\b(bye|goodbye|see you)\b/.test(text)) return "Goodbye. Thank you for practicing English with me.";
+  if (scenario.id === "hotel-check-in") {
+    if (text.includes("reservation") || text.includes("book")) return "Great. May I have your full name, please?";
+    if (text.includes("night")) return "Thank you. Would you like breakfast included?";
+    if (text.includes("yes")) return "Perfect. Here is your room key. Your room is on the third floor.";
+  }
+  if (scenario.id === "restaurant-order") {
+    if (text.includes("water") || text.includes("juice")) return "Sure. What food would you like with your drink?";
+    if (text.includes("rice") || text.includes("noodle") || text.includes("burger")) return "Good choice. Would you like anything else?";
+    if (text.includes("thank")) return "You are welcome. Your food will be ready soon.";
+  }
+  if (scenario.id === "school-office") {
+    if (text.includes("teacher")) return "Which teacher are you looking for?";
+    if (text.includes("class")) return "Please write your class and name here.";
+    if (text.includes("lost")) return "I can help. What did you lose?";
+  }
+  if (scenario.id === "doctor-visit") {
+    if (text.includes("head") || text.includes("stomach") || text.includes("hurt")) return "I see. When did it start?";
+    if (text.includes("today") || text.includes("yesterday")) return "Please drink water and rest. I will check you now.";
+    if (text.includes("fever")) return "Let me take your temperature first.";
+  }
+  return scenario.sampleReplies[turn % scenario.sampleReplies.length] || "Can you tell me more?";
 }
 
 function isWritingCorrect(answer: string, correctAnswer: string) {
