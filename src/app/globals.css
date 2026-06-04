@@ -1716,6 +1716,95 @@ button.pill {
   border-color: var(--line);
   box-shadow: none;
 }
+.speak-ai-card {
+  background:
+    radial-gradient(circle at 92% 12%, rgba(255, 226, 122, .24), transparent 7rem),
+    radial-gradient(circle at 8% 16%, rgba(126, 212, 255, .18), transparent 8rem),
+    #fff;
+}
+.speak-score-card {
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  gap: 16px;
+  align-items: center;
+  margin: 18px 0;
+  padding: 16px;
+  border: 2px solid #dce8ff;
+  border-radius: 24px;
+  background: linear-gradient(135deg, rgba(247, 251, 255, .94), rgba(255, 255, 255, .9));
+  box-shadow: inset 0 -8px 0 rgba(76, 199, 161, .08);
+}
+.speak-score-ring {
+  display: grid;
+  width: 78px;
+  height: 78px;
+  place-items: center;
+  align-content: center;
+  border: 6px solid #dfe9ff;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 12px 26px rgba(73, 126, 219, .14);
+  color: var(--ink);
+}
+.speak-score-ring strong {
+  font-size: 24px;
+  line-height: 1;
+}
+.speak-score-ring small {
+  color: var(--muted);
+  font-weight: 900;
+}
+.speak-score-ring.trying {
+  border-color: #ffe27a;
+}
+.speak-score-ring.passed {
+  border-color: #54d6a8;
+  box-shadow: 0 12px 26px rgba(76, 199, 161, .22);
+}
+.speak-score-card p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+.speech-transcript {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 16px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  background: #eef6ff;
+  color: var(--muted);
+  font-weight: 800;
+}
+.speech-transcript strong {
+  color: var(--ink);
+}
+.speak-record-btn {
+  box-shadow: 0 12px 22px rgba(74, 120, 255, .22);
+}
+.speak-coach-panel {
+  background:
+    radial-gradient(circle at 20% 10%, rgba(255, 226, 122, .24), transparent 7rem),
+    linear-gradient(180deg, #fff, #f6fbff);
+}
+.speak-tip-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+.speak-tip-list span {
+  padding: 13px 14px;
+  border: 2px solid #dce8ff;
+  border-radius: 18px;
+  background: rgba(255,255,255,.84);
+  color: var(--ink);
+  font-weight: 900;
+}
+.wrong-feedback {
+  color: #ff5d7d;
+  font-weight: 900;
+}
 .owl-help-backdrop {
   position: fixed;
   inset: 0;

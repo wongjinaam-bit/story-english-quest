@@ -31,6 +31,9 @@ type SpeakTaskState = {
   done: Record<string, boolean>;
   heard: Record<string, boolean>;
   tries: Record<string, number>;
+  transcripts?: Record<string, string>;
+  scores?: Record<string, number>;
+  feedback?: Record<string, string>;
 };
 
 type WritingFeedback = {
@@ -1348,7 +1351,7 @@ function Story({ lesson, showZh, setShowZh, speed, setSpeed, speak, next }: {
   setShowZh: (value: boolean) => void;
   speed: number;
   setSpeed: (value: number) => void;
-  speak: (text: string) => void;
+  speak: (text: string, rate?: number) => void;
   next: () => void;
 }) {
   const difficulty = lessonDifficulty(lesson);
@@ -1605,7 +1608,7 @@ function QuizTask({ lesson, skill, questions, speak, state, onStateChange, helpU
 
 function SpeakTask({ lesson, speak, state, onStateChange, helpUsed, onHelp, onAnswer, onDone }: {
   lesson: Lesson;
-  speak: (text: string) => void;
+  speak: (text: string, rate?: number) => void;
   state: SpeakTaskState;
   onStateChange: (state: SpeakTaskState) => void;
   helpUsed: boolean;
@@ -1613,10 +1616,46 @@ function SpeakTask({ lesson, speak, state, onStateChange, helpUsed, onHelp, onAn
   onAnswer: (skill: Skill, label: string, correct: boolean, answer: string, correctAnswer: string) => void;
   onDone: () => void;
 }) {
-  const { done, heard, tries } = state;
+  const { done, heard, tries, transcripts = {}, scores = {}, feedback = {} } = state;
+  const [recordingId, setRecordingId] = useState<string | null>(null);
+  const [speechError, setSpeechError] = useState("");
   const allDone = lesson.speak.every((item) => done[item.id]);
   const nextTask = lesson.speak.find((item) => !done[item.id]) || lesson.speak[0];
   const setTaskState = (patch: Partial<SpeakTaskState>) => onStateChange({ ...state, ...patch });
+  const speechSupported = typeof window !== "undefined" && ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
+
+  async function checkPronunciation(task: { id: string; prompt: string; target: string }) {
+    if (!heard[task.id]) {
+      setSpeechError("請先聽一次範例，再開始朗讀。");
+      return;
+    }
+    if (!speechSupported) {
+      setSpeechError("這個瀏覽器暫時不支援語音辨識。請用 Chrome 或 Edge 測試口說任務。");
+      return;
+    }
+    setSpeechError("");
+    setRecordingId(task.id);
+    try {
+      const transcript = await listenToStudentSpeech();
+      const score = scorePronunciation(task.target, transcript);
+      const passed = score >= 70;
+      const nextTries = (tries[task.id] || 0) + 1;
+      const nextFeedback = buildSpeechFeedback(task.target, transcript, score);
+      setTaskState({
+        heard,
+        tries: { ...tries, [task.id]: nextTries },
+        transcripts: { ...transcripts, [task.id]: transcript },
+        scores: { ...scores, [task.id]: score },
+        feedback: { ...feedback, [task.id]: nextFeedback },
+        done: passed ? { ...done, [task.id]: true } : done
+      });
+      onAnswer("speak", `${task.prompt}：${task.target}`, passed, transcript || "未辨識到聲音", task.target);
+    } catch (error) {
+      setSpeechError(error instanceof Error ? error.message : "沒有成功聽到聲音，請再試一次。");
+    } finally {
+      setRecordingId(null);
+    }
+  }
   if (!lesson.speak.length) {
     return (
       <section className="grid two">
@@ -1634,42 +1673,149 @@ function SpeakTask({ lesson, speak, state, onStateChange, helpUsed, onHelp, onAn
         <div className="section-title">
           <h3>Speak 口說任務</h3>
           <div className="admin-actions">
-            <span className="pill">AI 發音教練可作第二階段接入</span>
+            <span className="pill">AI 發音檢查</span>
             <button className="btn owl-help-btn" type="button" disabled={helpUsed || !nextTask} onClick={() => nextTask && onHelp(nextTask.target)}>
               {helpUsed ? "已用求助" : "Owl 求助"}
             </button>
           </div>
         </div>
         {lesson.speak.map((task) => (
-          <div className="task-card" key={task.id}>
+          <div className="task-card speak-ai-card" key={task.id}>
             <p className="eyebrow">{task.prompt}</p>
             <h3>{task.target}</h3>
-            <p className="muted">步驟：先聽範例，再大聲跟讀，最後按「我已跟讀」。</p>
+            <p className="muted">先聽範例，再按「開始朗讀」。AI 會聽你讀出的英文，判斷發音和咬字是否接近。</p>
+            <div className="speak-score-card">
+              <div className={`speak-score-ring ${done[task.id] ? "passed" : scores[task.id] ? "trying" : ""}`}>
+                <strong>{scores[task.id] ?? "--"}</strong>
+                <small>分</small>
+              </div>
+              <div>
+                <strong>{done[task.id] ? "發音通過" : scores[task.id] ? "再調整一下" : "等待朗讀"}</strong>
+                <p>{feedback[task.id] || "Owl 老師會聽你的朗讀，然後告訴你要加強哪裡。"}</p>
+              </div>
+            </div>
+            {transcripts[task.id] && (
+              <div className="speech-transcript">
+                <span>AI 聽到：</span>
+                <strong>{transcripts[task.id]}</strong>
+              </div>
+            )}
             <div className="btns">
               <button className="btn secondary" onClick={() => {
-                speak(task.target);
+                speak(task.target, 0.78);
                 setTaskState({
                   heard: { ...heard, [task.id]: true },
-                  tries: { ...tries, [task.id]: (tries[task.id] || 0) + 1 }
+                  tries
                 });
-              }}><Mic size={18} /> 聽範例</button>
-              <button className="btn primary" disabled={!heard[task.id]} onClick={() => {
-                setTaskState({ done: { ...done, [task.id]: true } });
-                onAnswer("speak", `${task.prompt}：${task.target}`, true, `已跟讀 ${tries[task.id] || 1} 次`, task.target);
-              }}>
-                {done[task.id] ? "已完成" : "我已跟讀"}
+              }}><Headphones size={18} /> 聽範例</button>
+              <button className="btn primary speak-record-btn" disabled={!heard[task.id] || recordingId === task.id} onClick={() => checkPronunciation(task)}>
+                <Mic size={18} /> {recordingId === task.id ? "正在聽你讀..." : done[task.id] ? "再讀一次" : "開始朗讀"}
               </button>
             </div>
           </div>
         ))}
+        {speechError && <div className="feedback wrong-feedback">{speechError}</div>}
         <button className="btn primary full" disabled={!allDone} onClick={onDone}>完成口說任務</button>
       </article>
-      <aside className="panel">
-        <h3>鼓勵式回饋</h3>
-        <p className="muted">Great! Good try! Try again with one word. 第二階段可接 AI 發音教練。</p>
+      <aside className="panel speak-coach-panel">
+        <h3>Owl 口說教室</h3>
+        <p className="muted">讀的時候靠近麥克風，慢慢說完整句子。70 分以上才算通過。</p>
+        <div className="speak-tip-list">
+          <span>1. 先聽範例</span>
+          <span>2. 再自己朗讀</span>
+          <span>3. 看 AI 回饋修正</span>
+        </div>
       </aside>
     </section>
   );
+}
+
+function listenToStudentSpeech(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      reject(new Error("這個瀏覽器不支援語音辨識。"));
+      return;
+    }
+    const recognition = new SpeechRecognition();
+    recognition.lang = "en-US";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.continuous = false;
+    let settled = false;
+    recognition.onresult = (event: any) => {
+      const transcript = event.results?.[0]?.[0]?.transcript || "";
+      settled = true;
+      resolve(transcript.trim());
+    };
+    recognition.onerror = (event: any) => {
+      settled = true;
+      const reason = event.error === "not-allowed"
+        ? "瀏覽器沒有麥克風權限，請允許使用麥克風。"
+        : "沒有成功聽到聲音，請再讀一次。";
+      reject(new Error(reason));
+    };
+    recognition.onend = () => {
+      if (!settled) {
+        settled = true;
+        reject(new Error("沒有辨識到朗讀內容，請靠近麥克風再試一次。"));
+      }
+    };
+    recognition.start();
+  });
+}
+
+function normalizeSpeechText(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z\s']/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function scorePronunciation(target: string, transcript: string) {
+  const targetText = normalizeSpeechText(target);
+  const spokenText = normalizeSpeechText(transcript);
+  if (!spokenText) return 0;
+  const targetWords = targetText.split(" ").filter(Boolean);
+  const spokenWords = spokenText.split(" ").filter(Boolean);
+  const matchedWords = targetWords.filter((word) => spokenWords.includes(word)).length;
+  const wordScore = targetWords.length ? matchedWords / targetWords.length : 0;
+  const charScore = similarityScore(targetText, spokenText);
+  return Math.round(Math.min(100, (wordScore * 0.58 + charScore * 0.42) * 100));
+}
+
+function similarityScore(a: string, b: string) {
+  if (!a && !b) return 1;
+  if (!a || !b) return 0;
+  const distance = levenshteinDistance(a, b);
+  return Math.max(0, 1 - distance / Math.max(a.length, b.length));
+}
+
+function levenshteinDistance(a: string, b: string) {
+  const previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= a.length; i += 1) {
+    let last = i - 1;
+    previous[0] = i;
+    for (let j = 1; j <= b.length; j += 1) {
+      const old = previous[j];
+      previous[j] = a[i - 1] === b[j - 1]
+        ? last
+        : Math.min(previous[j - 1], previous[j], last) + 1;
+      last = old;
+    }
+  }
+  return previous[b.length];
+}
+
+function buildSpeechFeedback(target: string, transcript: string, score: number) {
+  const targetWords = normalizeSpeechText(target).split(" ").filter(Boolean);
+  const spokenWords = normalizeSpeechText(transcript).split(" ").filter(Boolean);
+  const missing = targetWords.filter((word) => !spokenWords.includes(word));
+  if (score >= 88) return "很好，發音和咬字都很接近範例。可以再挑戰更自然的語速。";
+  if (score >= 70) return missing.length ? `通過了。再注意 ${missing.slice(0, 2).join(", ")} 這些字要讀清楚。` : "通過了。句子大致正確，可以再讀得更流暢。";
+  if (missing.length) return `再試一次。AI 沒有清楚聽到 ${missing.slice(0, 3).join(", ")}，請把這些字慢慢讀完整。`;
+  return "再試一次。句子聽起來接近，但咬字還不夠清楚，請放慢速度。";
 }
 
 function WriteTask({ lesson, state, onStateChange, helpUsed, onHelp, onAnswer, onDone }: {
