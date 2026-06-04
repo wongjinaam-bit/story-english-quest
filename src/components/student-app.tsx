@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Headphones, LogOut, Mic, QrCode, Sparkles, Star, UserRound } from "lucide-react";
 import { appLessons } from "@/data/lessons";
 import { isSupabaseReady, signInStudent, signOut, signUpStudent } from "@/lib/auth";
@@ -1821,13 +1821,42 @@ function SpeakTask({ lesson, speak, state, onStateChange, sectionCompleted = fal
   const [recordingId, setRecordingId] = useState<string | null>(null);
   const [speechError, setSpeechError] = useState("");
   const [confirmFinish, setConfirmFinish] = useState(false);
+  const recordingStopRef = useRef<(() => void) | null>(null);
   const allDone = sectionCompleted || lesson.speak.every((item) => done[item.id]);
   const lowScoreTasks = lesson.speak.filter((item) => done[item.id] && (scores[item.id] ?? 100) < 70);
   const nextTask = lesson.speak.find((item) => !done[item.id]) || task || lesson.speak[0];
   const setTaskState = (patch: Partial<SpeakTaskState>) => onStateChange({ ...state, ...patch });
   const speechSupported = typeof window !== "undefined" && ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
 
-  async function checkPronunciation(task: { id: string; prompt: string; target: string }) {
+  useEffect(() => {
+    return () => {
+      recordingStopRef.current?.();
+      recordingStopRef.current = null;
+    };
+  }, []);
+
+  function finishPronunciationCheck(task: { id: string; prompt: string; target: string }, transcript: string) {
+    const score = scorePronunciation(task.target, transcript);
+    const passed = score >= 70;
+    const nextTries = (tries[task.id] || 0) + 1;
+    const nextFeedback = buildSpeechFeedback(task.target, transcript, score);
+    setTaskState({
+      index: safeIndex,
+      heard,
+      tries: { ...tries, [task.id]: nextTries },
+      transcripts: { ...transcripts, [task.id]: transcript },
+      scores: { ...scores, [task.id]: score },
+      feedback: { ...feedback, [task.id]: nextFeedback },
+      done: { ...done, [task.id]: true }
+    });
+    onAnswer("speak", `${task.prompt}：${task.target}`, passed, transcript || "未辨識到聲音", task.target);
+  }
+
+  function checkPronunciation(task: { id: string; prompt: string; target: string }) {
+    if (recordingId === task.id) {
+      recordingStopRef.current?.();
+      return;
+    }
     if (!heard[task.id]) {
       setSpeechError("請先聽一次範例，再開始朗讀。");
       return;
@@ -1841,27 +1870,19 @@ function SpeakTask({ lesson, speak, state, onStateChange, sectionCompleted = fal
     if (typeof window !== "undefined" && window.speechSynthesis) {
       window.speechSynthesis.cancel();
     }
-    try {
-      const transcript = await listenToStudentSpeech({ timeoutMs: 12000 });
-      const score = scorePronunciation(task.target, transcript);
-      const passed = score >= 70;
-      const nextTries = (tries[task.id] || 0) + 1;
-      const nextFeedback = buildSpeechFeedback(task.target, transcript, score);
-      setTaskState({
-        index: safeIndex,
-        heard,
-        tries: { ...tries, [task.id]: nextTries },
-        transcripts: { ...transcripts, [task.id]: transcript },
-        scores: { ...scores, [task.id]: score },
-        feedback: { ...feedback, [task.id]: nextFeedback },
-        done: { ...done, [task.id]: true }
-      });
-      onAnswer("speak", `${task.prompt}：${task.target}`, passed, transcript || "未辨識到聲音", task.target);
-    } catch (error) {
-      setSpeechError(error instanceof Error ? error.message : "沒有成功聽到聲音，請再試一次。");
-    } finally {
-      setRecordingId(null);
-    }
+    recordingStopRef.current = startStudentSpeechSession({
+      timeoutMs: 12000,
+      onResult: (transcript) => {
+        finishPronunciationCheck(task, transcript);
+        setRecordingId(null);
+        recordingStopRef.current = null;
+      },
+      onError: (error) => {
+        setSpeechError(error.message);
+        setRecordingId(null);
+        recordingStopRef.current = null;
+      }
+    });
   }
 
   function previousTask() {
@@ -1950,8 +1971,8 @@ function SpeakTask({ lesson, speak, state, onStateChange, sectionCompleted = fal
                   tries
                 });
               }}><Headphones size={18} /> 聽範例</button>
-              <button className="btn primary speak-record-btn" disabled={!heard[task.id] || recordingId === task.id} onClick={() => checkPronunciation(task)}>
-                <Mic size={18} /> {recordingId === task.id ? "正在聽你讀..." : done[task.id] ? "再讀一次" : "開始朗讀"}
+              <button className="btn primary speak-record-btn" disabled={!heard[task.id] || Boolean(recordingId && recordingId !== task.id)} onClick={() => checkPronunciation(task)}>
+                <Mic size={18} /> {recordingId === task.id ? "結束朗讀" : done[task.id] ? "再讀一次" : "開始朗讀"}
               </button>
             </div>
             <div className="btns task-nav-actions">
@@ -1987,58 +2008,70 @@ function SpeakTask({ lesson, speak, state, onStateChange, sectionCompleted = fal
   );
 }
 
+function startStudentSpeechSession({
+  timeoutMs = 12000,
+  onResult,
+  onError
+}: {
+  timeoutMs?: number;
+  onResult: (transcript: string) => void;
+  onError: (error: Error) => void;
+}) {
+  const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    onError(new Error("這個瀏覽器不支援語音辨識。"));
+    return () => undefined;
+  }
+  const recognition = new SpeechRecognition();
+  recognition.lang = "en-US";
+  recognition.interimResults = true;
+  recognition.maxAlternatives = 1;
+  recognition.continuous = true;
+  let settled = false;
+  let bestTranscript = "";
+
+  function finishWithTranscript() {
+    if (settled) return;
+    settled = true;
+    window.clearTimeout(timeout);
+    recognition.stop();
+    if (bestTranscript.trim()) onResult(bestTranscript.trim());
+    else onError(new Error("沒有聽到清楚的英文。請靠近麥克風，再慢慢讀一次。"));
+  }
+
+  const timeout = window.setTimeout(finishWithTranscript, timeoutMs);
+
+  recognition.onresult = (event: any) => {
+    let transcript = "";
+    for (let index = 0; index < event.results.length; index += 1) {
+      transcript += `${event.results[index]?.[0]?.transcript || ""} `;
+    }
+    bestTranscript = transcript.trim() || bestTranscript;
+  };
+  recognition.onerror = (event: any) => {
+    if (settled) return;
+    settled = true;
+    window.clearTimeout(timeout);
+    const reason = event.error === "not-allowed"
+      ? "瀏覽器沒有麥克風權限，請允許使用麥克風。"
+      : "沒有成功聽到聲音，請再讀一次。";
+    onError(new Error(reason));
+  };
+  recognition.onend = () => {
+    if (!settled) finishWithTranscript();
+  };
+  recognition.start();
+
+  return finishWithTranscript;
+}
+
 function listenToStudentSpeech(options: { timeoutMs?: number } = {}): Promise<string> {
   return new Promise((resolve, reject) => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      reject(new Error("這個瀏覽器不支援語音辨識。"));
-      return;
-    }
-    const recognition = new SpeechRecognition();
-    recognition.lang = "en-US";
-    recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
-    recognition.continuous = true;
-    let settled = false;
-    let bestTranscript = "";
-    const timeout = window.setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      recognition.stop();
-      if (bestTranscript.trim()) resolve(bestTranscript.trim());
-      else reject(new Error("沒有聽到清楚的英文。請靠近麥克風，再慢慢讀一次。"));
-    }, options.timeoutMs || 9000);
-    recognition.onresult = (event: any) => {
-      let transcript = "";
-      for (let index = 0; index < event.results.length; index += 1) {
-        transcript += `${event.results[index]?.[0]?.transcript || ""} `;
-      }
-      bestTranscript = transcript.trim() || bestTranscript;
-      const lastResult = event.results[event.results.length - 1];
-      if (lastResult?.isFinal && bestTranscript) {
-        settled = true;
-        window.clearTimeout(timeout);
-        recognition.stop();
-        resolve(bestTranscript.trim());
-      }
-    };
-    recognition.onerror = (event: any) => {
-      settled = true;
-      window.clearTimeout(timeout);
-      const reason = event.error === "not-allowed"
-        ? "瀏覽器沒有麥克風權限，請允許使用麥克風。"
-        : "沒有成功聽到聲音，請再讀一次。";
-      reject(new Error(reason));
-    };
-    recognition.onend = () => {
-      if (!settled) {
-        settled = true;
-        window.clearTimeout(timeout);
-        if (bestTranscript.trim()) resolve(bestTranscript.trim());
-        else reject(new Error("沒有辨識到朗讀內容，請靠近麥克風再試一次。"));
-      }
-    };
-    recognition.start();
+    startStudentSpeechSession({
+      timeoutMs: options.timeoutMs || 9000,
+      onResult: resolve,
+      onError: reject
+    });
   });
 }
 
@@ -2627,6 +2660,7 @@ function Review({ progress, lessons, speak, onAnswer }: {
   const [feedback, setFeedback] = useState<Record<string, string>>({});
   const [reviewSpeech, setReviewSpeech] = useState<Record<string, { transcript: string; score: number }>>({});
   const [recording, setRecording] = useState<string | null>(null);
+  const reviewRecordingStopRef = useRef<(() => void) | null>(null);
   const today = new Date().toISOString().slice(0, 10);
   const dueItems = items.filter((item) => item.nextReview <= today);
   const laterItems = items.filter((item) => item.nextReview > today);
@@ -2645,6 +2679,13 @@ function Review({ progress, lessons, speak, onAnswer }: {
   }, [lessons, visibleItems]);
   const selectedGroup = selectedLessonId ? groupedLessons[selectedLessonId] : null;
 
+  useEffect(() => {
+    return () => {
+      reviewRecordingStopRef.current?.();
+      reviewRecordingStopRef.current = null;
+    };
+  }, []);
+
   function choose(item: { label: string; skill: Skill }, question: ChoiceQuestion, answer: string, reviewLessonId?: string) {
     const correct = answer === question.answer;
     setPicked((current) => ({ ...current, [item.label]: answer }));
@@ -2655,11 +2696,16 @@ function Review({ progress, lessons, speak, onAnswer }: {
     onAnswer(item.label, item.skill, correct, reviewLessonId, answer, question.answer);
   }
 
-  async function practiceSpeech(item: { label: string; skill: Skill }, lesson: Lesson | undefined, task: SpeakingTask) {
+  function practiceSpeech(item: { label: string; skill: Skill }, lesson: Lesson | undefined, task: SpeakingTask) {
+    if (recording === item.label) {
+      reviewRecordingStopRef.current?.();
+      return;
+    }
     setRecording(item.label);
     if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
-    try {
-      const transcript = await listenToStudentSpeech({ timeoutMs: 12000 });
+    reviewRecordingStopRef.current = startStudentSpeechSession({
+      timeoutMs: 12000,
+      onResult: (transcript) => {
       const score = scorePronunciation(task.target, transcript);
       setReviewSpeech((current) => ({ ...current, [item.label]: { transcript, score } }));
       setFeedback((current) => ({
@@ -2667,11 +2713,15 @@ function Review({ progress, lessons, speak, onAnswer }: {
         [item.label]: score >= 70 ? "口說通過，這題會慢慢從再挑戰移除。" : `目前 ${score} 分，建議再聽範例重讀一次。`
       }));
       onAnswer(item.label, "speak", score >= 70, lesson?.id, transcript || "未辨識到聲音", task.target);
-    } catch (event) {
-      setFeedback((current) => ({ ...current, [item.label]: event instanceof Error ? event.message : "沒有成功聽到聲音，請再試一次。" }));
-    } finally {
       setRecording(null);
-    }
+      reviewRecordingStopRef.current = null;
+      },
+      onError: (error) => {
+        setFeedback((current) => ({ ...current, [item.label]: error.message }));
+        setRecording(null);
+        reviewRecordingStopRef.current = null;
+      }
+    });
   }
 
   function submitWriting(item: { label: string; skill: Skill }, lesson: Lesson | undefined, task: WritingTask) {
@@ -2770,8 +2820,8 @@ function Review({ progress, lessons, speak, onAnswer }: {
                         <button className="btn secondary" type="button" onClick={() => speak(context.speaking?.target || item.label, 0.78)}>
                           <Headphones size={18} /> 聽範例
                         </button>
-                        <button className="btn primary" type="button" disabled={recording === item.label} onClick={() => practiceSpeech(item, context.lesson, context.speaking as SpeakingTask)}>
-                          <Mic size={18} /> {recording === item.label ? "正在聽你讀..." : "開始朗讀"}
+                        <button className="btn primary" type="button" disabled={Boolean(recording && recording !== item.label)} onClick={() => practiceSpeech(item, context.lesson, context.speaking as SpeakingTask)}>
+                          <Mic size={18} /> {recording === item.label ? "結束朗讀" : "開始朗讀"}
                         </button>
                       </div>
                       {speech && (
