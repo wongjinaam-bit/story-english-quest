@@ -325,13 +325,14 @@ export function StudentApp() {
   const [lockedHint, setLockedHint] = useState<{ id: string; message: string } | null>(null);
   const [mapWorldLevel, setMapWorldLevel] = useState<1 | 2 | 3>(1);
   const [pendingNavigation, setPendingNavigation] = useState<Screen | null>(null);
+  const [pendingReplayLesson, setPendingReplayLesson] = useState<Lesson | null>(null);
   const [activeScenario, setActiveScenario] = useState<DialogueScenario | null>(null);
   const [dialogueMessages, setDialogueMessages] = useState<DialogueMessage[]>([]);
   const [dialogueExitOpen, setDialogueExitOpen] = useState(false);
   const studentLearningLevel = defaultLearningLevel(student?.proficiencyLevel);
   const lessons = useMemo(() => {
     if (!student) return allLessons;
-    const assignedIds = new Set(assignments.map((assignment) => assignment.lesson_id));
+    const assignedIds = new Set(assignments.filter((assignment) => assignment.skill !== "dialogue").map((assignment) => assignment.lesson_id));
     const completedIds = new Set(progress?.completedLessons || []);
     const levelComplete = (level: LearningLevel) => {
       const levelLessons = allLessons.filter((item) => lessonDifficulty(item) === level);
@@ -348,6 +349,10 @@ export function StudentApp() {
   const preferredStartLesson = useMemo(
     () => lessons.find((item) => lessonDifficulty(item) === studentLearningLevel) || lessons[0] || appLessons[0],
     [lessons, studentLearningLevel]
+  );
+  const assignedDialogueIds = useMemo(
+    () => new Set(assignments.filter((assignment) => assignment.skill === "dialogue").map((assignment) => assignment.lesson_id)),
+    [assignments]
   );
   const lesson = useMemo(() => lessons.find((item) => item.id === lessonId) || preferredStartLesson, [lessonId, lessons, preferredStartLesson]);
   const practicedLessonIds = useMemo(() => new Set([
@@ -694,6 +699,19 @@ export function StudentApp() {
   }
 
   async function startAssignment(assignment: AppAssignment) {
+    if (assignment.skill === "dialogue") {
+      const scenario = dialogueScenarios.find((item) => item.id === assignment.lesson_id);
+      if (!scenario) {
+        setCloudStatus("老師指定的情境任務不存在，請老師重新指定。");
+        return;
+      }
+      setActiveScenario(scenario);
+      const firstMessage = { role: "ai" as const, text: scenario.opening };
+      setDialogueMessages([firstMessage]);
+      setScreen("dialogue");
+      window.setTimeout(() => speak(scenario.opening, 0.88, scenario.voice), 120);
+      return;
+    }
     const nextLessons = await loadPublishedCourses();
     if (!nextLessons.some((item) => item.id === assignment.lesson_id)) {
       setCloudStatus("任務課程尚未發布到學生端，請老師先到課程內容管理發布這門課。");
@@ -705,6 +723,7 @@ export function StudentApp() {
 
   async function completeMatchingAssignments(completedLessonId: string, completedSkill: Skill, lessonCompleted: boolean) {
     const doneAssignments = assignments.filter((assignment) =>
+      assignment.skill !== "dialogue" &&
       assignment.lesson_id === completedLessonId &&
       (assignment.skill === completedSkill || (assignment.skill === "all" && lessonCompleted))
     );
@@ -715,6 +734,49 @@ export function StudentApp() {
       .from("app_assignments")
       .update({ status: "completed", completed_at: new Date().toISOString() })
       .in("id", ids);
+  }
+
+  async function completeDialogueAssignments(scenarioId: string) {
+    const doneAssignments = assignments.filter((assignment) => assignment.skill === "dialogue" && assignment.lesson_id === scenarioId);
+    if (!doneAssignments.length || !supabase) return;
+    const ids = doneAssignments.map((assignment) => assignment.id);
+    setAssignments((current) => current.filter((assignment) => !ids.includes(assignment.id)));
+    const { error } = await supabase
+      .from("app_assignments")
+      .update({ status: "completed", completed_at: new Date().toISOString() })
+      .in("id", ids);
+    setCloudStatus(error ? `情境任務完成狀態更新失敗：${error.message}` : "情境任務已完成，老師端可以看到完成狀態。");
+  }
+
+  function resetLessonForReplay(targetLesson: Lesson) {
+    setQuizTaskStates((current) => {
+      const next = { ...current };
+      delete next[`${targetLesson.id}:listen`];
+      delete next[`${targetLesson.id}:read`];
+      return next;
+    });
+    setSpeakTaskStates((current) => {
+      const next = { ...current };
+      delete next[`${targetLesson.id}:speak`];
+      return next;
+    });
+    setWriteTaskStates((current) => {
+      const next = { ...current };
+      delete next[`${targetLesson.id}:write`];
+      return next;
+    });
+    setHelpUsed((current) => {
+      const next = { ...current };
+      delete next[targetLesson.id];
+      return next;
+    });
+    setCurrentLessonScreens((current) => ({ ...current, [targetLesson.id]: "story" }));
+    mutateProgress((draft) => {
+      draft.completedSkills[targetLesson.id] = [];
+    });
+    setLessonId(targetLesson.id);
+    setScreen("story");
+    setPendingReplayLesson(null);
   }
 
   return (
@@ -831,11 +893,14 @@ export function StudentApp() {
                 </div>
                 <div className="grid cards">
                   {assignments.map((item) => {
+                    const isDialogueAssignment = item.skill === "dialogue";
                     const assignedLesson = lessons.find((lesson) => lesson.id === item.lesson_id);
+                    const assignedScenario = dialogueScenarios.find((scenario) => scenario.id === item.lesson_id);
+                    const assignmentName = isDialogueAssignment ? assignedScenario?.title : assignedLesson?.title;
                     return (
                       <article className="card assignment-card" key={item.id}>
-                        <span className="pill">{item.skill === "all" ? "全部任務" : skillLabels[item.skill]}</span>
-                        <h3>{assignedLesson?.title || item.lesson_id}</h3>
+                        <span className="pill">{item.skill === "all" ? "全部任務" : item.skill === "dialogue" ? "情境對話" : skillLabels[item.skill]}</span>
+                        <h3>{assignmentName || item.lesson_id}</h3>
                         <p className="muted">
                           {item.due_date ? `截止日期：${item.due_date}` : "沒有截止日期"}
                           {item.note ? <><br />老師備註：{item.note}</> : null}
@@ -954,8 +1019,7 @@ export function StudentApp() {
                                 return;
                               }
                               if (completed) {
-                                setLessonId(item.id);
-                                setScreen("story");
+                                setPendingReplayLesson(item);
                                 return;
                               }
                               openLessonAtResume(item.id);
@@ -988,7 +1052,7 @@ export function StudentApp() {
         {screen === "speak" && <SpeakTask lesson={lesson} speak={speak} state={speakStateFor()} onStateChange={updateSpeakState} sectionCompleted={lessonSkills.includes("speak")} helpUsed={hasUsedHelp("speak")} onHelp={(answer) => showOwlHelp("speak", answer, `正確朗讀句：${answer}`)} onAnswer={answerPractice} onPrevSection={() => setScreen("listen")} onNextSection={() => setScreen("read")} onDone={() => { completeSkill("speak"); setScreen("read"); }} />}
         {screen === "read" && <QuizTask key={`${lesson.id}-read`} lesson={lesson} skill="read" questions={readQuestions} speak={speak} state={quizStateFor("read")} onStateChange={(nextState) => updateQuizState("read", nextState)} sectionCompleted={lessonSkills.includes("read")} helpUsed={hasUsedHelp("read")} onHelp={(question) => showOwlHelp("read", question.answer, `正確答案：${question.answer}`)} onAnswer={answerQuestion} onPrevSection={() => setScreen("speak")} onNextSection={() => setScreen("write")} onDone={() => { completeSkill("read"); setScreen("write"); }} />}
         {screen === "write" && <WriteTask lesson={lesson} state={writeStateFor()} onStateChange={updateWriteState} sectionCompleted={lessonSkills.includes("write")} helpUsed={hasUsedHelp("write")} onHelp={(answer) => showOwlHelp("write", answer, `正確答案：${answer}`)} onAnswer={answerPractice} onPrevSection={() => setScreen("read")} onDone={() => { completeSkill("write"); setScreen("progress"); }} />}
-        {screen === "dialogue" && <ScenarioDialogue scenarios={dialogueScenarios} activeScenario={activeScenario} setActiveScenario={setActiveScenario} messages={dialogueMessages} setMessages={setDialogueMessages} exitOpen={dialogueExitOpen} setExitOpen={setDialogueExitOpen} studentId={student.id} speak={speak} />}
+        {screen === "dialogue" && <ScenarioDialogue scenarios={dialogueScenarios} activeScenario={activeScenario} setActiveScenario={setActiveScenario} messages={dialogueMessages} setMessages={setDialogueMessages} exitOpen={dialogueExitOpen} setExitOpen={setDialogueExitOpen} studentId={student.id} speak={speak} assignedScenarioIds={assignedDialogueIds} onCompleteScenarioAssignment={completeDialogueAssignments} />}
         {screen === "review" && <Review progress={progress} lessons={allLessons} speak={speak} onAnswer={answerReview} />}
         {screen === "progress" && <Progress progress={progress} student={student} />}
       </main>
@@ -1000,6 +1064,17 @@ export function StudentApp() {
           lessonTitle={lesson.title}
           onCancel={() => setPendingNavigation(null)}
           onLeave={confirmNavigationAway}
+        />
+      )}
+      {pendingReplayLesson && (
+        <ReplayLessonPrompt
+          lesson={pendingReplayLesson}
+          onCancel={() => {
+            setLessonId(pendingReplayLesson.id);
+            setScreen(resumeScreenForLesson(pendingReplayLesson.id));
+            setPendingReplayLesson(null);
+          }}
+          onReplay={() => resetLessonForReplay(pendingReplayLesson)}
         />
       )}
     </div>
@@ -1074,6 +1149,37 @@ function QuestLeavePrompt({ currentScreen, lessonTitle, onCancel, onLeave }: {
         <div className="btns">
           <button className="btn primary adventure-btn" type="button" onClick={onCancel}>繼續挑戰</button>
           <button className="btn secondary adventure-btn" type="button" onClick={onLeave}>先離開</button>
+        </div>
+      </article>
+    </div>
+  );
+}
+
+function ReplayLessonPrompt({ lesson, onCancel, onReplay }: {
+  lesson: Lesson;
+  onCancel: () => void;
+  onReplay: () => void;
+}) {
+  return (
+    <div className="quest-guard-backdrop" role="dialog" aria-modal="true" aria-label="重新挑戰提醒" onClick={onCancel}>
+      <article className="quest-guard-card" onClick={(event) => event.stopPropagation()}>
+        <div className="owl-help-teacher">
+          <OwlMark />
+          <div>
+            <strong>這一關已經完成</strong>
+            <small>{lesson.title}</small>
+          </div>
+        </div>
+        <div className="quest-guard-bubble">
+          <span>👑</span>
+          <div>
+            <h3>要重新做這個單元嗎？</h3>
+            <p>選「不用，回到原進度」會保留之前的答題狀態。選「重新挑戰」才會清除這一課的本次聽說讀寫進度；後面的關卡不會被重新鎖住。</p>
+          </div>
+        </div>
+        <div className="btns">
+          <button className="btn primary adventure-btn" type="button" onClick={onCancel}>不用，回到原進度</button>
+          <button className="btn secondary adventure-btn" type="button" onClick={onReplay}>重新挑戰</button>
         </div>
       </article>
     </div>
@@ -1610,6 +1716,7 @@ const wordPhotoTerms: Record<string, string> = {
 };
 
 function wordPhotoUrl(word: Word, lesson: Lesson) {
+  if (word.imageUrl) return word.imageUrl;
   const key = word.word.toLowerCase();
   const term = wordPhotoTerms[key] || `${word.word} ${lesson.topic} english learning`;
   return `https://source.unsplash.com/960x640/?${encodeURIComponent(term)}`;
@@ -2429,7 +2536,9 @@ function ScenarioDialogue({
   exitOpen,
   setExitOpen,
   studentId,
-  speak
+  speak,
+  assignedScenarioIds,
+  onCompleteScenarioAssignment
 }: {
   scenarios: DialogueScenario[];
   activeScenario: DialogueScenario | null;
@@ -2440,6 +2549,8 @@ function ScenarioDialogue({
   setExitOpen: (open: boolean) => void;
   studentId: string;
   speak: (text: string, rate?: number, voiceHint?: "male" | "female") => void;
+  assignedScenarioIds: Set<string>;
+  onCompleteScenarioAssignment: (scenarioId: string) => void;
 }) {
   const [input, setInput] = useState("");
   const [listening, setListening] = useState(false);
@@ -2518,7 +2629,7 @@ function ScenarioDialogue({
           {scenarios.map((scenario) => (
             <article className="card scenario-card" key={scenario.id}>
               <div className="scenario-cover">{scenario.cover}</div>
-              <span className="pill">{learningLevelLabels[scenario.level]}</span>
+              <span className="pill">{assignedScenarioIds.has(scenario.id) ? "老師指定" : learningLevelLabels[scenario.level]}</span>
               <h3>{scenario.title}</h3>
               <p>{scenario.topic} · AI 扮演 {scenario.role}</p>
               <p className="muted">{scenario.goal}</p>
@@ -2529,6 +2640,9 @@ function ScenarioDialogue({
       </section>
     );
   }
+
+  const isAssignedScenario = assignedScenarioIds.has(activeScenario.id);
+  const hasStudentReply = messages.some((message) => message.role === "student");
 
   return (
     <section className="dialogue-stage">
@@ -2551,6 +2665,22 @@ function ScenarioDialogue({
           <div className="ai-mode-warning">
             <strong>AI 沒有成功啟動，目前正在使用簡易備援回覆。</strong>
             <span>{aiError}</span>
+          </div>
+        )}
+        {isAssignedScenario && (
+          <div className="notice-box dialogue-assignment-banner">
+            <div>
+              <strong>老師指定情境任務</strong>
+              <p>至少回覆 AI 一次後，就可以標記完成。</p>
+            </div>
+            <button
+              className="btn primary"
+              type="button"
+              disabled={!hasStudentReply}
+              onClick={() => onCompleteScenarioAssignment(activeScenario.id)}
+            >
+              完成情境任務
+            </button>
           </div>
         )}
         <div className="dialogue-box">

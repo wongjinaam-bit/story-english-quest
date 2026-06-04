@@ -6,7 +6,7 @@ import { isSupabaseReady, signInStaff, signOut } from "@/lib/auth";
 import { mergePublishedLessons } from "@/lib/course-drafts";
 import { defaultLearningLevel, learningLevelLabels, lessonDifficulty } from "@/lib/learning-levels";
 import { supabase } from "@/lib/supabase";
-import type { AppAssignment, CourseDraft, LearningLevel, Lesson, Profile, Skill, StudentProgress, UserRole } from "@/lib/types";
+import type { AppAssignment, AssignmentKind, CourseDraft, LearningLevel, Lesson, Profile, Skill, StudentProgress, UserRole } from "@/lib/types";
 
 type AdminTab = "dashboard" | "students" | "assignments" | "courses" | "admin";
 
@@ -16,11 +16,38 @@ type StudentRow = {
   updated_at: string | null;
 };
 
+type PixabayImage = {
+  id: number;
+  tags: string;
+  previewUrl: string;
+  imageUrl: string;
+  pageUrl: string;
+  user: string;
+};
+
 const demoStudents = [
   { id: "s1", name: "Amy Chen", username: "s001", completed: 3, weak: "Listening", stars: 42 },
   { id: "s2", name: "Ben Lin", username: "s002", completed: 2, weak: "Writing", stars: 31 },
   { id: "s3", name: "Mia Wong", username: "s003", completed: 5, weak: "Speaking", stars: 78 }
 ];
+
+const dialogueAssignmentOptions = [
+  { id: "hotel-check-in", title: "去酒店入住", topic: "Travel", level: "intermediate" as LearningLevel, cover: "🏨" },
+  { id: "restaurant-order", title: "在餐廳點餐", topic: "Food", level: "beginner" as LearningLevel, cover: "🍽️" },
+  { id: "school-office", title: "到學校辦公室", topic: "School", level: "beginner" as LearningLevel, cover: "🏫" },
+  { id: "doctor-visit", title: "看醫生", topic: "Health", level: "advanced" as LearningLevel, cover: "🩺" },
+  { id: "airport-security", title: "機場安檢", topic: "Travel", level: "intermediate" as LearningLevel, cover: "✈️" },
+  { id: "library-help", title: "圖書館借書", topic: "Reading", level: "beginner" as LearningLevel, cover: "📚" },
+  { id: "shopping-clothes", title: "買衣服", topic: "Shopping", level: "intermediate" as LearningLevel, cover: "👕" },
+  { id: "bus-station", title: "巴士站問路", topic: "City", level: "beginner" as LearningLevel, cover: "🚌" },
+  { id: "museum-tour", title: "博物館導覽", topic: "Culture", level: "advanced" as LearningLevel, cover: "🏛️" }
+];
+
+function assignmentKindLabel(kind: AssignmentKind) {
+  if (kind === "all") return "全部任務";
+  if (kind === "dialogue") return "情境對話";
+  return teacherSkillLabels[kind];
+}
 
 export function AdminApp() {
   const [loggedIn, setLoggedIn] = useState(false);
@@ -517,8 +544,10 @@ function Students({
 
 function Assignments({ students, teacher, supabaseReady }: { students: StudentRow[]; teacher: Profile | null; supabaseReady: boolean }) {
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+  const [assignmentType, setAssignmentType] = useState<"lesson" | "dialogue">("lesson");
   const [lessonId, setLessonId] = useState(appLessons[0].id);
-  const [skill, setSkill] = useState<Skill | "all">("all");
+  const [scenarioId, setScenarioId] = useState(dialogueAssignmentOptions[0].id);
+  const [skill, setSkill] = useState<AssignmentKind>("all");
   const [dueDate, setDueDate] = useState("");
   const [note, setNote] = useState("");
   const [assignments, setAssignments] = useState<AppAssignment[]>([]);
@@ -570,8 +599,8 @@ function Assignments({ students, teacher, supabaseReady }: { students: StudentRo
     const rows = selectedStudentIds.map((studentId) => ({
       teacher_id: teacher.id,
       student_id: studentId,
-      lesson_id: lessonId,
-      skill,
+      lesson_id: assignmentType === "dialogue" ? scenarioId : lessonId,
+      skill: assignmentType === "dialogue" ? "dialogue" : skill,
       due_date: dueDate || null,
       note: note.trim() || null
     }));
@@ -582,13 +611,15 @@ function Assignments({ students, teacher, supabaseReady }: { students: StudentRo
       return;
     }
 
-    setMessage(`任務已指定給 ${selectedStudentIds.length} 位學生。`);
+    setMessage(`${assignmentType === "dialogue" ? "情境對話" : "課程"}任務已指定給 ${selectedStudentIds.length} 位學生。`);
     setNote("");
     await loadAssignments();
   }
 
   const studentName = (id: string) => students.find((row) => row.profile.id === id)?.profile.name || "學生";
   const lessonTitle = (id: string) => assignableLessons.find((lesson) => lesson.id === id)?.title || id;
+  const scenarioTitle = (id: string) => dialogueAssignmentOptions.find((scenario) => scenario.id === id)?.title || id;
+  const assignmentTitle = (item: AppAssignment) => item.skill === "dialogue" ? scenarioTitle(item.lesson_id) : lessonTitle(item.lesson_id);
   const allSelected = students.length > 0 && selectedStudentIds.length === students.length;
 
   function toggleStudent(id: string) {
@@ -620,26 +651,49 @@ function Assignments({ students, teacher, supabaseReady }: { students: StudentRo
             </div>
           </div>
           <div className="field">
-            <label>課程</label>
-            <select value={lessonId} onChange={(event) => setLessonId(event.target.value)}>
-              {assignableLessons.map((lesson) => (
-                <option key={lesson.id} value={lesson.id}>
-                  {learningLevelLabels[lessonDifficulty(lesson)]} · {lesson.title}
-                </option>
-              ))}
-            </select>
-            <small>這裡會包含已發布到學生端的自訂課程。</small>
-          </div>
-          <div className="field">
-            <label>技能</label>
-            <select value={skill} onChange={(event) => setSkill(event.target.value as Skill | "all")}>
-              <option value="all">全部任務</option>
-              <option value="listen">聽力</option>
-              <option value="speak">口說</option>
-              <option value="read">閱讀</option>
-              <option value="write">寫作</option>
+            <label>任務類型</label>
+            <select value={assignmentType} onChange={(event) => setAssignmentType(event.target.value as "lesson" | "dialogue")}>
+              <option value="lesson">課程任務</option>
+              <option value="dialogue">情境對話任務</option>
             </select>
           </div>
+          {assignmentType === "lesson" ? (
+            <>
+              <div className="field">
+                <label>課程</label>
+                <select value={lessonId} onChange={(event) => setLessonId(event.target.value)}>
+                  {assignableLessons.map((lesson) => (
+                    <option key={lesson.id} value={lesson.id}>
+                      {learningLevelLabels[lessonDifficulty(lesson)]} · {lesson.title}
+                    </option>
+                  ))}
+                </select>
+                <small>這裡會包含已發布到學生端的自訂課程。</small>
+              </div>
+              <div className="field">
+                <label>技能</label>
+                <select value={skill} onChange={(event) => setSkill(event.target.value as AssignmentKind)}>
+                  <option value="all">全部任務</option>
+                  <option value="listen">聽力</option>
+                  <option value="speak">口說</option>
+                  <option value="read">閱讀</option>
+                  <option value="write">寫作</option>
+                </select>
+              </div>
+            </>
+          ) : (
+            <div className="field">
+              <label>情境對話</label>
+              <select value={scenarioId} onChange={(event) => setScenarioId(event.target.value)}>
+                {dialogueAssignmentOptions.map((scenario) => (
+                  <option key={scenario.id} value={scenario.id}>
+                    {scenario.cover} {learningLevelLabels[scenario.level]} · {scenario.title}
+                  </option>
+                ))}
+              </select>
+              <small>學生會在情境對話功能中完成，至少回覆一次後才能標記完成。</small>
+            </div>
+          )}
           <div className="field"><label>截止日期</label><input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} /></div>
           <div className="field"><label>老師備註</label><textarea rows={3} value={note} onChange={(event) => setNote(event.target.value)} placeholder="例如：今天完成聽力和閱讀" /></div>
           {message && <p className={message.includes("已指定") ? "success-text" : "form-error"}>{message}</p>}
@@ -654,8 +708,8 @@ function Assignments({ students, teacher, supabaseReady }: { students: StudentRo
         </div>
         {assignments.length ? assignments.map((item) => (
           <div className="assignment-row" key={item.id}>
-            <strong>{studentName(item.student_id)}：{lessonTitle(item.lesson_id)}</strong>
-            <small>{item.skill === "all" ? "全部任務" : item.skill} · {item.due_date || "無截止日期"} · {item.status}</small>
+            <strong>{studentName(item.student_id)}：{assignmentTitle(item)}</strong>
+            <small>{assignmentKindLabel(item.skill)} · {item.due_date || "無截止日期"} · {item.status}</small>
             {item.note && <p className="muted">{item.note}</p>}
           </div>
         )) : <p className="muted">暫時沒有指定任務。</p>}
@@ -698,7 +752,7 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
     setCover(lesson.cover);
     setPattern(lesson.pattern);
     setSentencesText(lesson.sentences.map((item) => `${item.en} | ${item.zh} | ${item.image}`).join("\n"));
-    setWordsText(lesson.words.map((item) => `${item.word} | ${item.meaning} | ${item.part} | ${item.image} | ${item.example} | ${item.translation} | ${item.level}`).join("\n"));
+    setWordsText(lesson.words.map((item) => `${item.word} | ${item.meaning} | ${item.part} | ${item.image} | ${item.example} | ${item.translation} | ${item.level}${item.imageUrl ? ` | ${item.imageUrl}` : ""}`).join("\n"));
     setListenText(lesson.listen.map((item) => `${item.prompt} | ${item.answer} | ${item.options.join(", ")} | ${item.audio || ""}`).join("\n"));
     setReadText(lesson.read.map((item) => `${item.prompt} | ${item.answer} | ${item.options.join(", ")}`).join("\n"));
     setSpeakText(lesson.speak.map((item) => `${item.prompt} | ${item.target}`).join("\n"));
@@ -1243,10 +1297,11 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
                 <p className="muted">建議 6 至 10 個單字，包含詞性、例句和中文翻譯。</p>
               </div>
               <div className="field">
-                <label>格式：word | 中文 | 詞性 | 圖示 | 例句 | 翻譯 | Level</label>
+                <label>格式：word | 中文 | 詞性 | 圖示 | 例句 | 翻譯 | Level | 圖片網址</label>
                 <textarea rows={8} value={wordsText} onChange={(event) => setWordsText(event.target.value)} />
-                <small>例：monkey | 猴子 | noun | 🐵 | The monkey can jump. | 猴子會跳。 | Level 1</small>
+                <small>例：monkey | 猴子 | noun | 🐵 | The monkey can jump. | 猴子會跳。 | Level 1 | https://...</small>
               </div>
+              <PixabayWordImagePicker wordsText={wordsText} setWordsText={setWordsText} />
             </section>
 
             <section className="editor-section">
@@ -1357,6 +1412,128 @@ function Courses({ teacher, supabaseReady }: { teacher: Profile | null; supabase
       </article>
     </div>
   );
+}
+
+function PixabayWordImagePicker({
+  wordsText,
+  setWordsText
+}: {
+  wordsText: string;
+  setWordsText: (value: string) => void;
+}) {
+  const wordRows = useMemo(() => parseWordRows(wordsText), [wordsText]);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [query, setQuery] = useState("");
+  const [images, setImages] = useState<PixabayImage[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
+  const selectedWord = wordRows[selectedIndex];
+
+  useEffect(() => {
+    if (!selectedWord) return;
+    setQuery(`${selectedWord.word} 3d icon`);
+  }, [selectedWord?.word]);
+
+  async function searchImages() {
+    setMessage("");
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/pixabay?q=${encodeURIComponent(query || `${selectedWord?.word || "english"} 3d icon`)}`);
+      const data = await response.json();
+      if (!response.ok) {
+        setImages([]);
+        setMessage(summarizePixabayError(data?.error || `HTTP ${response.status}`));
+        return;
+      }
+      setImages(data.images || []);
+      if (!(data.images || []).length) setMessage("找不到圖片，請換一個英文關鍵字，例如：3d book icon。");
+    } catch {
+      setImages([]);
+      setMessage("無法連接 Pixabay 搜圖 API。");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function useImage(imageUrl: string) {
+    if (!selectedWord) return;
+    const lines = wordsText.split("\n");
+    const targetLineIndex = selectedWord.lineIndex;
+    const parts = lines[targetLineIndex].split("|").map((part) => part.trim());
+    while (parts.length < 7) parts.push("");
+    parts[7] = imageUrl;
+    lines[targetLineIndex] = parts.join(" | ");
+    setWordsText(lines.join("\n"));
+    setMessage(`已套用圖片到 ${selectedWord.word}。記得儲存草稿或發布。`);
+  }
+
+  if (!wordRows.length) {
+    return (
+      <div className="pixabay-picker empty-state">
+        <strong>先輸入單字，才能搜尋圖片。</strong>
+        <p className="muted">格式至少要有第一欄英文單字，例如：book | 書 | noun。</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="pixabay-picker">
+      <div className="pixabay-picker-head">
+        <div>
+          <p className="eyebrow">Pixabay Image Picker</p>
+          <h4>用 Pixabay 選高清單字圖片</h4>
+          <p className="muted">建議搜尋 3D icon、cartoon object、cute illustration 這類風格，選中後會固定保存到課程單字。</p>
+        </div>
+        <span className="pill blue">需要 Vercel 設定 PIXABAY_API_KEY</span>
+      </div>
+      <div className="pixabay-controls">
+        <div className="field">
+          <label>選擇要換圖的單字</label>
+          <select value={selectedIndex} onChange={(event) => setSelectedIndex(Number(event.target.value))}>
+            {wordRows.map((row, index) => (
+              <option key={`${row.word}-${row.lineIndex}`} value={index}>{row.word} · {row.meaning || "未填中文"}</option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label>搜尋關鍵字</label>
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="例如：book 3d icon" />
+        </div>
+        <button className="btn primary" type="button" disabled={loading} onClick={searchImages}>
+          {loading ? "搜尋中..." : "搜尋圖片"}
+        </button>
+      </div>
+      {message && <p className={message.includes("已套用") ? "success-text" : "form-error"}>{message}</p>}
+      {images.length > 0 && (
+        <div className="pixabay-results">
+          {images.map((image) => (
+            <article className="pixabay-result" key={image.id}>
+              <img src={image.previewUrl || image.imageUrl} alt={image.tags} />
+              <div>
+                <strong>{image.tags}</strong>
+                <small>by {image.user}</small>
+              </div>
+              <button className="btn secondary" type="button" onClick={() => useImage(image.imageUrl)}>使用這張</button>
+            </article>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function parseWordRows(wordsText: string) {
+  return wordsText.split("\n").map((line, lineIndex) => {
+    const [word, meaning] = line.split("|").map((part) => part.trim());
+    return word ? { word, meaning, lineIndex } : null;
+  }).filter(Boolean) as { word: string; meaning: string; lineIndex: number }[];
+}
+
+function summarizePixabayError(raw: string) {
+  const text = raw.toLowerCase();
+  if (text.includes("pixabay_api_key is not configured")) return "Vercel 還沒有設定 PIXABAY_API_KEY，請先加入環境變數並重新部署。";
+  if (text.includes("invalid") || text.includes("key")) return "Pixabay API Key 可能無效，請檢查是否貼錯。";
+  return "Pixabay 搜圖失敗，請稍後再試或換一個關鍵字。";
 }
 
 function AdminTools() {

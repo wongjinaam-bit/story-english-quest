@@ -1,4 +1,5 @@
 export type Skill = "listen" | "speak" | "read" | "write";
+export type AssignmentKind = Skill | "all" | "dialogue";
 
 export type UserRole = "student" | "teacher" | "admin";
 
@@ -9,6 +10,7 @@ export type Word = {
   meaning: string;
   part: string;
   image: string;
+  imageUrl?: string;
   example: string;
   translation: string;
   level: string;
@@ -101,7 +103,7 @@ export type AppAssignment = {
   teacher_id: string;
   student_id: string;
   lesson_id: string;
-  skill: Skill | "all";
+  skill: AssignmentKind;
   due_date: string | null;
   note: string | null;
   status: "assigned" | "completed";

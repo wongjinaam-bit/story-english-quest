@@ -18,12 +18,13 @@ function parseSentences(text = ""): StorySentence[] {
 
 function parseWords(text = ""): Word[] {
   return text.split("\n").map((line) => {
-    const [word, meaning, part, image, example, translation, level] = splitLine(line);
+    const [word, meaning, part, image, example, translation, level, imageUrl] = splitLine(line);
     return word ? {
       word,
       meaning: meaning || "",
       part: part || "noun",
       image: image || "📘",
+      imageUrl: imageUrl || undefined,
       example: example || `I see ${word}.`,
       translation: translation || "",
       level: level || "Level 1"
