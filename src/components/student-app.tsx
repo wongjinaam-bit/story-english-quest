@@ -984,10 +984,10 @@ export function StudentApp() {
         {screen === "story" && <Story lesson={lesson} showZh={showZh} setShowZh={setShowZh} speed={speed} setSpeed={setSpeed} speak={speak} next={() => setScreen(nextWithoutRegressing(lesson.id, "questVocab"))} />}
         {screen === "questVocab" && <Vocabulary lesson={lesson} learnedWords={learnedWords} speak={speak} questMode next={() => setScreen("listen")} onMark={markVocabulary} />}
         {screen === "vocab" && <Vocabulary lesson={lesson} learnedWords={learnedWords} speak={speak} />}
-        {screen === "listen" && <QuizTask key={`${lesson.id}-listen`} lesson={lesson} skill="listen" questions={listenQuestions} speak={speak} state={quizStateFor("listen")} onStateChange={(nextState) => updateQuizState("listen", nextState)} helpUsed={hasUsedHelp("listen")} onHelp={(question) => showOwlHelp("listen", question.answer, `正確答案：${question.answer}`)} onAnswer={answerQuestion} onPrevSection={() => setScreen("questVocab")} onNextSection={() => setScreen("speak")} onDone={() => { completeSkill("listen"); setScreen("speak"); }} />}
-        {screen === "speak" && <SpeakTask lesson={lesson} speak={speak} state={speakStateFor()} onStateChange={updateSpeakState} helpUsed={hasUsedHelp("speak")} onHelp={(answer) => showOwlHelp("speak", answer, `正確朗讀句：${answer}`)} onAnswer={answerPractice} onPrevSection={() => setScreen("listen")} onNextSection={() => setScreen("read")} onDone={() => { completeSkill("speak"); setScreen("read"); }} />}
-        {screen === "read" && <QuizTask key={`${lesson.id}-read`} lesson={lesson} skill="read" questions={readQuestions} speak={speak} state={quizStateFor("read")} onStateChange={(nextState) => updateQuizState("read", nextState)} helpUsed={hasUsedHelp("read")} onHelp={(question) => showOwlHelp("read", question.answer, `正確答案：${question.answer}`)} onAnswer={answerQuestion} onPrevSection={() => setScreen("speak")} onNextSection={() => setScreen("write")} onDone={() => { completeSkill("read"); setScreen("write"); }} />}
-        {screen === "write" && <WriteTask lesson={lesson} state={writeStateFor()} onStateChange={updateWriteState} helpUsed={hasUsedHelp("write")} onHelp={(answer) => showOwlHelp("write", answer, `正確答案：${answer}`)} onAnswer={answerPractice} onPrevSection={() => setScreen("read")} onDone={() => { completeSkill("write"); setScreen("progress"); }} />}
+        {screen === "listen" && <QuizTask key={`${lesson.id}-listen`} lesson={lesson} skill="listen" questions={listenQuestions} speak={speak} state={quizStateFor("listen")} onStateChange={(nextState) => updateQuizState("listen", nextState)} sectionCompleted={lessonSkills.includes("listen")} helpUsed={hasUsedHelp("listen")} onHelp={(question) => showOwlHelp("listen", question.answer, `正確答案：${question.answer}`)} onAnswer={answerQuestion} onPrevSection={() => setScreen("questVocab")} onNextSection={() => setScreen("speak")} onDone={() => { completeSkill("listen"); setScreen("speak"); }} />}
+        {screen === "speak" && <SpeakTask lesson={lesson} speak={speak} state={speakStateFor()} onStateChange={updateSpeakState} sectionCompleted={lessonSkills.includes("speak")} helpUsed={hasUsedHelp("speak")} onHelp={(answer) => showOwlHelp("speak", answer, `正確朗讀句：${answer}`)} onAnswer={answerPractice} onPrevSection={() => setScreen("listen")} onNextSection={() => setScreen("read")} onDone={() => { completeSkill("speak"); setScreen("read"); }} />}
+        {screen === "read" && <QuizTask key={`${lesson.id}-read`} lesson={lesson} skill="read" questions={readQuestions} speak={speak} state={quizStateFor("read")} onStateChange={(nextState) => updateQuizState("read", nextState)} sectionCompleted={lessonSkills.includes("read")} helpUsed={hasUsedHelp("read")} onHelp={(question) => showOwlHelp("read", question.answer, `正確答案：${question.answer}`)} onAnswer={answerQuestion} onPrevSection={() => setScreen("speak")} onNextSection={() => setScreen("write")} onDone={() => { completeSkill("read"); setScreen("write"); }} />}
+        {screen === "write" && <WriteTask lesson={lesson} state={writeStateFor()} onStateChange={updateWriteState} sectionCompleted={lessonSkills.includes("write")} helpUsed={hasUsedHelp("write")} onHelp={(answer) => showOwlHelp("write", answer, `正確答案：${answer}`)} onAnswer={answerPractice} onPrevSection={() => setScreen("read")} onDone={() => { completeSkill("write"); setScreen("progress"); }} />}
         {screen === "dialogue" && <ScenarioDialogue scenarios={dialogueScenarios} activeScenario={activeScenario} setActiveScenario={setActiveScenario} messages={dialogueMessages} setMessages={setDialogueMessages} exitOpen={dialogueExitOpen} setExitOpen={setDialogueExitOpen} studentId={student.id} speak={speak} />}
         {screen === "review" && <Review progress={progress} lessons={allLessons} speak={speak} onAnswer={answerReview} />}
         {screen === "progress" && <Progress progress={progress} student={student} />}
@@ -1663,13 +1663,14 @@ function Vocabulary({ lesson, learnedWords, speak, questMode = false, next, onMa
   );
 }
 
-function QuizTask({ lesson, skill, questions, speak, state, onStateChange, helpUsed, onHelp, onAnswer, onPrevSection, onNextSection, onDone }: {
+function QuizTask({ lesson, skill, questions, speak, state, onStateChange, sectionCompleted = false, helpUsed, onHelp, onAnswer, onPrevSection, onNextSection, onDone }: {
   lesson: Lesson;
   skill: Skill;
   questions: ChoiceQuestion[];
   speak: (text: string, rate?: number) => void;
   state: QuizTaskState;
   onStateChange: (state: QuizTaskState) => void;
+  sectionCompleted?: boolean;
   helpUsed: boolean;
   onHelp: (question: ChoiceQuestion) => void;
   onAnswer: (question: ChoiceQuestion, answer: string) => boolean;
@@ -1684,7 +1685,8 @@ function QuizTask({ lesson, skill, questions, speak, state, onStateChange, helpU
   const picked = question ? (pickedById[question.id] || state.picked || "") : "";
   const feedback = question ? (feedbackById[question.id] || state.feedback || "") : "";
   const answeredCount = questions.filter((item) => pickedById[item.id]).length;
-  const allAnswered = questions.length > 0 && answeredCount >= questions.length;
+  const allAnswered = sectionCompleted || (questions.length > 0 && answeredCount >= questions.length);
+  const canMoveNextQuestion = sectionCompleted || Boolean(picked);
   const displayedOptions = useMemo(
     () => question ? shuffleQuestionOptions(question.options, question.answer, question.id) : [],
     [question]
@@ -1724,6 +1726,7 @@ function QuizTask({ lesson, skill, questions, speak, state, onStateChange, helpU
     }
     else {
       const nextQuestion = questions[index + 1];
+      if (!sectionCompleted && !picked) return;
       onStateChange({
         ...state,
         index: index + 1,
@@ -1784,7 +1787,7 @@ function QuizTask({ lesson, skill, questions, speak, state, onStateChange, helpU
           <div className="feedback">{feedback}</div>
           <div className="btns task-nav-actions">
             <button className="btn ghost" type="button" disabled={index <= 0} onClick={previousQuestion}>上一題</button>
-            <button className="btn primary" type="button" disabled={!picked || (index >= questions.length - 1 && !allAnswered)} onClick={next}>
+            <button className="btn primary" type="button" disabled={!canMoveNextQuestion || (index >= questions.length - 1 && !allAnswered)} onClick={next}>
               {index >= questions.length - 1 ? "完成任務" : "下一題"}
             </button>
             {onNextSection && <button className="btn secondary" type="button" disabled={!allAnswered} onClick={onNextSection}>下一部分</button>}
@@ -1799,11 +1802,12 @@ function QuizTask({ lesson, skill, questions, speak, state, onStateChange, helpU
   );
 }
 
-function SpeakTask({ lesson, speak, state, onStateChange, helpUsed, onHelp, onAnswer, onPrevSection, onNextSection, onDone }: {
+function SpeakTask({ lesson, speak, state, onStateChange, sectionCompleted = false, helpUsed, onHelp, onAnswer, onPrevSection, onNextSection, onDone }: {
   lesson: Lesson;
   speak: (text: string, rate?: number) => void;
   state: SpeakTaskState;
   onStateChange: (state: SpeakTaskState) => void;
+  sectionCompleted?: boolean;
   helpUsed: boolean;
   onHelp: (answer: string) => void;
   onAnswer: (skill: Skill, label: string, correct: boolean, answer: string, correctAnswer: string) => void;
@@ -1817,7 +1821,7 @@ function SpeakTask({ lesson, speak, state, onStateChange, helpUsed, onHelp, onAn
   const [recordingId, setRecordingId] = useState<string | null>(null);
   const [speechError, setSpeechError] = useState("");
   const [confirmFinish, setConfirmFinish] = useState(false);
-  const allDone = lesson.speak.every((item) => done[item.id]);
+  const allDone = sectionCompleted || lesson.speak.every((item) => done[item.id]);
   const lowScoreTasks = lesson.speak.filter((item) => done[item.id] && (scores[item.id] ?? 100) < 70);
   const nextTask = lesson.speak.find((item) => !done[item.id]) || task || lesson.speak[0];
   const setTaskState = (patch: Partial<SpeakTaskState>) => onStateChange({ ...state, ...patch });
@@ -1866,7 +1870,7 @@ function SpeakTask({ lesson, speak, state, onStateChange, helpUsed, onHelp, onAn
   }
 
   function nextSpeakTask() {
-    if (!task || !done[task.id] || safeIndex >= lesson.speak.length - 1) return;
+    if (!task || (!sectionCompleted && !done[task.id]) || safeIndex >= lesson.speak.length - 1) return;
     setTaskState({ index: safeIndex + 1 });
   }
 
@@ -1911,8 +1915,8 @@ function SpeakTask({ lesson, speak, state, onStateChange, helpUsed, onHelp, onAn
                   className={index === safeIndex ? "pill blue" : done[item.id] ? "pill" : "pill muted-pill"}
                   key={item.id}
                   type="button"
-                  disabled={index > safeIndex && !done[item.id]}
-                  onClick={() => index <= safeIndex || done[item.id] ? setTaskState({ index }) : undefined}
+                  disabled={!sectionCompleted && index > safeIndex && !done[item.id]}
+                  onClick={() => sectionCompleted || index <= safeIndex || done[item.id] ? setTaskState({ index }) : undefined}
                 >
                   {done[item.id] ? "✓" : index + 1}
                 </button>
@@ -1952,7 +1956,7 @@ function SpeakTask({ lesson, speak, state, onStateChange, helpUsed, onHelp, onAn
             </div>
             <div className="btns task-nav-actions">
               <button className="btn ghost" type="button" disabled={safeIndex <= 0} onClick={previousTask}>上一題</button>
-              <button className="btn primary" type="button" disabled={!done[task.id] || safeIndex >= lesson.speak.length - 1} onClick={nextSpeakTask}>下一題</button>
+              <button className="btn primary" type="button" disabled={(!sectionCompleted && !done[task.id]) || safeIndex >= lesson.speak.length - 1} onClick={nextSpeakTask}>下一題</button>
               {onNextSection && <button className="btn secondary" type="button" disabled={!allDone} onClick={onNextSection}>下一部分</button>}
             </div>
           </div>
@@ -2091,10 +2095,11 @@ function buildSpeechFeedback(target: string, transcript: string, score: number) 
   return "再試一次。句子聽起來接近，但咬字還不夠清楚，請放慢速度。";
 }
 
-function WriteTask({ lesson, state, onStateChange, helpUsed, onHelp, onAnswer, onPrevSection, onNextSection, onDone }: {
+function WriteTask({ lesson, state, onStateChange, sectionCompleted = false, helpUsed, onHelp, onAnswer, onPrevSection, onNextSection, onDone }: {
   lesson: Lesson;
   state: WriteTaskState;
   onStateChange: (state: WriteTaskState) => void;
+  sectionCompleted?: boolean;
   helpUsed: boolean;
   onHelp: (answer: string) => void;
   onAnswer: (skill: Skill, label: string, correct: boolean, answer: string, correctAnswer: string) => void;
@@ -2105,7 +2110,7 @@ function WriteTask({ lesson, state, onStateChange, helpUsed, onHelp, onAnswer, o
   const safeIndex = Math.min(state.index || 0, Math.max(lesson.write.length - 1, 0));
   const { answers, checked, aiTips } = state;
   const task = lesson.write[safeIndex];
-  const complete = lesson.write.every((item) => checked[item.id]);
+  const complete = sectionCompleted || lesson.write.every((item) => checked[item.id]);
   const setTaskState = (patch: Partial<WriteTaskState>) => onStateChange({ ...state, ...patch });
   if (!lesson.write.length) {
     return (
@@ -2173,17 +2178,15 @@ function WriteTask({ lesson, state, onStateChange, helpUsed, onHelp, onAnswer, o
                 {checked[task.id].correct ? "寫得很好！" : `還差一點，正確答案參考：${checked[task.id].correctAnswer}`}
               </p>
             )}
-            {checked[task.id] && (
-              <div className="btns task-nav-actions">
-                <button className="btn ghost" type="button" disabled={safeIndex <= 0} onClick={() => setTaskState({ index: safeIndex - 1 })}>上一題</button>
-                {safeIndex < lesson.write.length - 1 ? (
-                  <button className="btn primary" type="button" onClick={() => setTaskState({ index: safeIndex + 1 })}>下一題</button>
-                ) : (
-                  <button className="btn primary" type="button" disabled={!complete} onClick={onDone}>完成寫作任務</button>
-                )}
-                {onNextSection && <button className="btn secondary" type="button" disabled={!complete} onClick={onNextSection}>下一部分</button>}
-              </div>
-            )}
+            <div className="btns task-nav-actions">
+              <button className="btn ghost" type="button" disabled={safeIndex <= 0} onClick={() => setTaskState({ index: safeIndex - 1 })}>上一題</button>
+              {safeIndex < lesson.write.length - 1 ? (
+                <button className="btn primary" type="button" disabled={!sectionCompleted && !checked[task.id]} onClick={() => setTaskState({ index: safeIndex + 1 })}>下一題</button>
+              ) : (
+                <button className="btn primary" type="button" disabled={!complete} onClick={onDone}>完成寫作任務</button>
+              )}
+              {onNextSection && <button className="btn secondary" type="button" disabled={!complete} onClick={onNextSection}>下一部分</button>}
+            </div>
           </div>
         )}
       </article>
@@ -2300,6 +2303,7 @@ function ScenarioDialogue({
   const [input, setInput] = useState("");
   const [listening, setListening] = useState(false);
   const [thinking, setThinking] = useState(false);
+  const [aiMode, setAiMode] = useState<"unknown" | "ai" | "simple">("unknown");
   const [error, setError] = useState("");
 
   function startScenario(scenario: DialogueScenario) {
@@ -2316,11 +2320,12 @@ function ScenarioDialogue({
     setMessages(conversation);
     setInput("");
     setThinking(true);
-    const aiText = await requestDialogueReply(activeScenario, conversation);
-    const nextMessages = [...conversation, { role: "ai" as const, text: aiText }];
+    const aiResult = await requestDialogueReply(activeScenario, conversation);
+    setAiMode(aiResult.mode);
+    const nextMessages = [...conversation, { role: "ai" as const, text: aiResult.reply }];
     setMessages(nextMessages);
     setThinking(false);
-    speak(aiText, 0.88, activeScenario.voice);
+    speak(aiResult.reply, 0.88, activeScenario.voice);
   }
 
   async function useVoiceInput() {
@@ -2393,6 +2398,9 @@ function ScenarioDialogue({
               <small>AI role: {activeScenario.role}</small>
             </div>
           </div>
+          <span className={`pill ${aiMode === "ai" ? "" : "blue"}`}>
+            {aiMode === "ai" ? "真正 AI 模式" : aiMode === "simple" ? "簡易備援模式" : "AI 檢查中"}
+          </span>
           <button className="btn ghost" type="button" onClick={() => setExitOpen(true)}>退出</button>
         </div>
         <div className="dialogue-box">
@@ -2455,20 +2463,32 @@ async function requestDialogueReply(scenario: DialogueScenario, messages: Dialog
     });
     if (!response.ok) throw new Error("AI API unavailable");
     const data = await response.json();
-    if (typeof data.reply === "string" && data.reply.trim()) return data.reply.trim();
+    if (typeof data.reply === "string" && data.reply.trim()) {
+      return { reply: data.reply.trim(), mode: "ai" as const };
+    }
   } catch {
     const lastStudentMessage = messages.filter((message) => message.role === "student").at(-1)?.text || "";
-    return generateDialogueReply(scenario, lastStudentMessage, messages.length);
+    return { reply: generateDialogueReply(scenario, lastStudentMessage, messages.length), mode: "simple" as const };
   }
   const lastStudentMessage = messages.filter((message) => message.role === "student").at(-1)?.text || "";
-  return generateDialogueReply(scenario, lastStudentMessage, messages.length);
+  return { reply: generateDialogueReply(scenario, lastStudentMessage, messages.length), mode: "simple" as const };
 }
 
 function generateDialogueReply(scenario: DialogueScenario, studentText: string, turn: number) {
   const text = studentText.toLowerCase();
+  const studentTurn = Math.max(0, Math.floor((turn - 1) / 2));
   if (/\b(bye|goodbye|see you)\b/.test(text)) return "Goodbye. Thank you for practicing English with me.";
+  if (/\b(hi|hello|hey)\b/.test(text)) {
+    if (scenario.id === "hotel-check-in") return "Hello. Welcome to Star Hotel. Do you have a reservation today?";
+    if (scenario.id === "restaurant-order") return "Hello. Welcome. What would you like to eat or drink?";
+    if (scenario.id === "school-office") return "Hi. How can I help you at school today?";
+    if (scenario.id === "doctor-visit") return "Hello. Please tell me how you feel today.";
+    return scenario.opening;
+  }
   if (scenario.id === "hotel-check-in") {
     if (text.includes("reservation") || text.includes("book")) return "Great. May I have your full name, please?";
+    if (text.includes("no")) return "No problem. Would you like to book a room now?";
+    if (text.includes("name") || text.includes("my name is")) return "Thank you. How many nights will you stay?";
     if (text.includes("night")) return "Thank you. Would you like breakfast included?";
     if (text.includes("yes")) return "Perfect. Here is your room key. Your room is on the third floor.";
   }
@@ -2487,7 +2507,7 @@ function generateDialogueReply(scenario: DialogueScenario, studentText: string, 
     if (text.includes("today") || text.includes("yesterday")) return "Please drink water and rest. I will check you now.";
     if (text.includes("fever")) return "Let me take your temperature first.";
   }
-  return scenario.sampleReplies[turn % scenario.sampleReplies.length] || "Can you tell me more?";
+  return scenario.sampleReplies[studentTurn % scenario.sampleReplies.length] || "Can you tell me more?";
 }
 
 function isWritingCorrect(answer: string, correctAnswer: string) {
