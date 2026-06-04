@@ -17,7 +17,7 @@ import {
   saveCloudProgress,
   saveStudentSession
 } from "@/lib/progress";
-import type { AppAssignment, ChoiceQuestion, CourseDraft, LearningLevel, Lesson, Skill, StudentProgress, StudentSession, Word, WritingTask } from "@/lib/types";
+import type { AppAssignment, ChoiceQuestion, CourseDraft, LearningLevel, Lesson, Skill, SpeakingTask, StudentProgress, StudentSession, Word, WritingTask } from "@/lib/types";
 
 type Screen = "home" | "map" | "story" | "questVocab" | "vocab" | "listen" | "speak" | "read" | "write" | "dialogue" | "review" | "progress";
 
@@ -25,9 +25,12 @@ type QuizTaskState = {
   index: number;
   feedback: string;
   picked: string;
+  pickedById?: Record<string, string>;
+  feedbackById?: Record<string, string>;
 };
 
 type SpeakTaskState = {
+  index?: number;
   done: Record<string, boolean>;
   heard: Record<string, boolean>;
   tries: Record<string, number>;
@@ -59,6 +62,7 @@ type DialogueScenario = {
   opening: string;
   goal: string;
   sampleReplies: string[];
+  setting: string;
 };
 
 type WriteTaskState = {
@@ -152,7 +156,8 @@ const dialogueScenarios: DialogueScenario[] = [
     level: "intermediate",
     opening: "Good evening. Welcome to Star Hotel. Do you have a reservation?",
     goal: "練習入住、姓名、房間、早餐和付款。",
-    sampleReplies: ["May I have your name, please?", "How many nights will you stay?", "Would you like breakfast tomorrow?"]
+    sampleReplies: ["May I have your name, please?", "How many nights will you stay?", "Would you like breakfast tomorrow?"],
+    setting: "A friendly hotel lobby. The student is checking in and may ask about rooms, breakfast, keys, payment, or directions."
   },
   {
     id: "restaurant-order",
@@ -164,7 +169,8 @@ const dialogueScenarios: DialogueScenario[] = [
     level: "beginner",
     opening: "Hello. Welcome to Sunny Cafe. What would you like to eat?",
     goal: "練習點餐、飲料、數量和禮貌表達。",
-    sampleReplies: ["Would you like a drink?", "Do you want rice or noodles?", "Anything else?"]
+    sampleReplies: ["Would you like a drink?", "Do you want rice or noodles?", "Anything else?"],
+    setting: "A bright family restaurant. The student orders food and drinks, changes choices, asks prices, and says thank you."
   },
   {
     id: "school-office",
@@ -176,7 +182,8 @@ const dialogueScenarios: DialogueScenario[] = [
     level: "beginner",
     opening: "Hi. How can I help you today?",
     goal: "練習問路、請求幫助、找老師。",
-    sampleReplies: ["Which teacher are you looking for?", "What class are you in?", "Please wait here."]
+    sampleReplies: ["Which teacher are you looking for?", "What class are you in?", "Please wait here."],
+    setting: "A school office. The student may look for a teacher, ask for directions, report a lost item, or ask for help."
   },
   {
     id: "doctor-visit",
@@ -188,7 +195,73 @@ const dialogueScenarios: DialogueScenario[] = [
     level: "advanced",
     opening: "Hello. What seems to be the problem today?",
     goal: "練習描述身體不舒服、時間和建議。",
-    sampleReplies: ["Where does it hurt?", "When did it start?", "You should drink water and rest."]
+    sampleReplies: ["Where does it hurt?", "When did it start?", "You should drink water and rest."],
+    setting: "A calm clinic. The student describes symptoms, asks questions, and receives simple health advice."
+  },
+  {
+    id: "airport-security",
+    title: "在機場過安檢",
+    topic: "Travel",
+    cover: "🛫",
+    role: "Airport staff",
+    voice: "female",
+    level: "intermediate",
+    opening: "Hello. Please put your bag on the tray. Do you have any liquids?",
+    goal: "練習機場、行李、護照和簡單問題。",
+    sampleReplies: ["May I see your passport?", "Where are you flying today?", "Please walk through the gate."],
+    setting: "An airport security area. The student answers questions about bags, passport, destination, and travel plans."
+  },
+  {
+    id: "library-help",
+    title: "在圖書館借書",
+    topic: "Reading",
+    cover: "📚",
+    role: "Librarian",
+    voice: "female",
+    level: "beginner",
+    opening: "Hello. What kind of book are you looking for?",
+    goal: "練習找書、借書、還書和喜好。",
+    sampleReplies: ["Do you like animal stories?", "You can borrow this book for one week.", "Please bring your library card."],
+    setting: "A quiet library. The student asks for a book, explains what they like, and borrows or returns books."
+  },
+  {
+    id: "shopping-clothes",
+    title: "買衣服",
+    topic: "Shopping",
+    cover: "👕",
+    role: "Shop assistant",
+    voice: "male",
+    level: "intermediate",
+    opening: "Hi. Are you looking for a shirt, a jacket, or something else?",
+    goal: "練習尺寸、顏色、價錢和試穿。",
+    sampleReplies: ["What size do you need?", "Would you like to try it on?", "This one is on sale today."],
+    setting: "A clothes shop. The student chooses clothes, asks about size and color, and decides whether to buy."
+  },
+  {
+    id: "bus-station",
+    title: "搭巴士問路",
+    topic: "City",
+    cover: "🚌",
+    role: "Bus driver",
+    voice: "male",
+    level: "beginner",
+    opening: "Hello. Where do you want to go?",
+    goal: "練習地點、方向、車票和時間。",
+    sampleReplies: ["This bus goes to the park.", "The ticket is two dollars.", "Please get off at the next stop."],
+    setting: "A bus stop. The student asks where to go, buys a ticket, and checks the stop."
+  },
+  {
+    id: "museum-tour",
+    title: "參觀博物館",
+    topic: "Culture",
+    cover: "🏛️",
+    role: "Museum guide",
+    voice: "female",
+    level: "advanced",
+    opening: "Welcome to the museum. Which exhibit would you like to see first?",
+    goal: "練習提問、描述展品、表達看法。",
+    sampleReplies: ["This painting is very old.", "What do you notice about it?", "Please do not touch the exhibit."],
+    setting: "A museum tour. The student asks about exhibits, describes what they see, and shares opinions."
   }
 ];
 
@@ -911,10 +984,10 @@ export function StudentApp() {
         {screen === "story" && <Story lesson={lesson} showZh={showZh} setShowZh={setShowZh} speed={speed} setSpeed={setSpeed} speak={speak} next={() => setScreen(nextWithoutRegressing(lesson.id, "questVocab"))} />}
         {screen === "questVocab" && <Vocabulary lesson={lesson} learnedWords={learnedWords} speak={speak} questMode next={() => setScreen("listen")} onMark={markVocabulary} />}
         {screen === "vocab" && <Vocabulary lesson={lesson} learnedWords={learnedWords} speak={speak} />}
-        {screen === "listen" && <QuizTask key={`${lesson.id}-listen`} lesson={lesson} skill="listen" questions={listenQuestions} speak={speak} state={quizStateFor("listen")} onStateChange={(nextState) => updateQuizState("listen", nextState)} helpUsed={hasUsedHelp("listen")} onHelp={(question) => showOwlHelp("listen", question.answer, `正確答案：${question.answer}`)} onAnswer={answerQuestion} onBack={() => setScreen("questVocab")} onDone={() => { completeSkill("listen"); setScreen("speak"); }} />}
-        {screen === "speak" && <SpeakTask lesson={lesson} speak={speak} state={speakStateFor()} onStateChange={updateSpeakState} helpUsed={hasUsedHelp("speak")} onHelp={(answer) => showOwlHelp("speak", answer, `正確朗讀句：${answer}`)} onAnswer={answerPractice} onBack={() => setScreen("listen")} onDone={() => { completeSkill("speak"); setScreen("read"); }} />}
-        {screen === "read" && <QuizTask key={`${lesson.id}-read`} lesson={lesson} skill="read" questions={readQuestions} speak={speak} state={quizStateFor("read")} onStateChange={(nextState) => updateQuizState("read", nextState)} helpUsed={hasUsedHelp("read")} onHelp={(question) => showOwlHelp("read", question.answer, `正確答案：${question.answer}`)} onAnswer={answerQuestion} onBack={() => setScreen("speak")} onDone={() => { completeSkill("read"); setScreen("write"); }} />}
-        {screen === "write" && <WriteTask lesson={lesson} state={writeStateFor()} onStateChange={updateWriteState} helpUsed={hasUsedHelp("write")} onHelp={(answer) => showOwlHelp("write", answer, `正確答案：${answer}`)} onAnswer={answerPractice} onBack={() => setScreen("read")} onDone={() => { completeSkill("write"); setScreen("progress"); }} />}
+        {screen === "listen" && <QuizTask key={`${lesson.id}-listen`} lesson={lesson} skill="listen" questions={listenQuestions} speak={speak} state={quizStateFor("listen")} onStateChange={(nextState) => updateQuizState("listen", nextState)} helpUsed={hasUsedHelp("listen")} onHelp={(question) => showOwlHelp("listen", question.answer, `正確答案：${question.answer}`)} onAnswer={answerQuestion} onPrevSection={() => setScreen("questVocab")} onNextSection={() => setScreen("speak")} onDone={() => { completeSkill("listen"); setScreen("speak"); }} />}
+        {screen === "speak" && <SpeakTask lesson={lesson} speak={speak} state={speakStateFor()} onStateChange={updateSpeakState} helpUsed={hasUsedHelp("speak")} onHelp={(answer) => showOwlHelp("speak", answer, `正確朗讀句：${answer}`)} onAnswer={answerPractice} onPrevSection={() => setScreen("listen")} onNextSection={() => setScreen("read")} onDone={() => { completeSkill("speak"); setScreen("read"); }} />}
+        {screen === "read" && <QuizTask key={`${lesson.id}-read`} lesson={lesson} skill="read" questions={readQuestions} speak={speak} state={quizStateFor("read")} onStateChange={(nextState) => updateQuizState("read", nextState)} helpUsed={hasUsedHelp("read")} onHelp={(question) => showOwlHelp("read", question.answer, `正確答案：${question.answer}`)} onAnswer={answerQuestion} onPrevSection={() => setScreen("speak")} onNextSection={() => setScreen("write")} onDone={() => { completeSkill("read"); setScreen("write"); }} />}
+        {screen === "write" && <WriteTask lesson={lesson} state={writeStateFor()} onStateChange={updateWriteState} helpUsed={hasUsedHelp("write")} onHelp={(answer) => showOwlHelp("write", answer, `正確答案：${answer}`)} onAnswer={answerPractice} onPrevSection={() => setScreen("read")} onDone={() => { completeSkill("write"); setScreen("progress"); }} />}
         {screen === "dialogue" && <ScenarioDialogue scenarios={dialogueScenarios} activeScenario={activeScenario} setActiveScenario={setActiveScenario} messages={dialogueMessages} setMessages={setDialogueMessages} exitOpen={dialogueExitOpen} setExitOpen={setDialogueExitOpen} studentId={student.id} speak={speak} />}
         {screen === "review" && <Review progress={progress} lessons={allLessons} speak={speak} onAnswer={answerReview} />}
         {screen === "progress" && <Progress progress={progress} student={student} />}
@@ -1590,7 +1663,7 @@ function Vocabulary({ lesson, learnedWords, speak, questMode = false, next, onMa
   );
 }
 
-function QuizTask({ lesson, skill, questions, speak, state, onStateChange, helpUsed, onHelp, onAnswer, onBack, onDone }: {
+function QuizTask({ lesson, skill, questions, speak, state, onStateChange, helpUsed, onHelp, onAnswer, onPrevSection, onNextSection, onDone }: {
   lesson: Lesson;
   skill: Skill;
   questions: ChoiceQuestion[];
@@ -1600,11 +1673,18 @@ function QuizTask({ lesson, skill, questions, speak, state, onStateChange, helpU
   helpUsed: boolean;
   onHelp: (question: ChoiceQuestion) => void;
   onAnswer: (question: ChoiceQuestion, answer: string) => boolean;
-  onBack?: () => void;
+  onPrevSection?: () => void;
+  onNextSection?: () => void;
   onDone: () => void;
 }) {
-  const { index, feedback, picked } = state;
+  const pickedById = state.pickedById || {};
+  const feedbackById = state.feedbackById || {};
+  const { index } = state;
   const question = questions[index];
+  const picked = question ? (pickedById[question.id] || state.picked || "") : "";
+  const feedback = question ? (feedbackById[question.id] || state.feedback || "") : "";
+  const answeredCount = questions.filter((item) => pickedById[item.id]).length;
+  const allAnswered = questions.length > 0 && answeredCount >= questions.length;
   const displayedOptions = useMemo(
     () => question ? shuffleQuestionOptions(question.options, question.answer, question.id) : [],
     [question]
@@ -1629,17 +1709,39 @@ function QuizTask({ lesson, skill, questions, speak, state, onStateChange, helpU
 
   function choose(answer: string) {
     if (picked) return;
+    const nextFeedback = onAnswer(question, answer) ? "答對了！你得到 1 顆星。" : `再試一次也沒關係，正確答案是 ${question.answer}。`;
     setTaskState({
       picked: answer,
-      feedback: onAnswer(question, answer) ? "答對了！你得到 1 顆星。" : `再試一次也沒關係，正確答案是 ${question.answer}。`
+      feedback: nextFeedback,
+      pickedById: { ...pickedById, [question.id]: answer },
+      feedbackById: { ...feedbackById, [question.id]: nextFeedback }
     });
   }
 
   function next() {
-    if (index >= questions.length - 1) onDone();
-    else {
-      onStateChange({ index: index + 1, picked: "", feedback: "" });
+    if (index >= questions.length - 1) {
+      if (allAnswered) onDone();
     }
+    else {
+      const nextQuestion = questions[index + 1];
+      onStateChange({
+        ...state,
+        index: index + 1,
+        picked: nextQuestion ? pickedById[nextQuestion.id] || "" : "",
+        feedback: nextQuestion ? feedbackById[nextQuestion.id] || "" : ""
+      });
+    }
+  }
+
+  function previousQuestion() {
+    if (index <= 0) return;
+    const previous = questions[index - 1];
+    onStateChange({
+      ...state,
+      index: index - 1,
+      picked: previous ? pickedById[previous.id] || "" : "",
+      feedback: previous ? feedbackById[previous.id] || "" : ""
+    });
   }
 
   return (
@@ -1648,7 +1750,7 @@ function QuizTask({ lesson, skill, questions, speak, state, onStateChange, helpU
         <div className="section-title">
           <h3>{taskName(skill)} · {index + 1}/{questions.length}</h3>
           <div className="admin-actions">
-            {onBack && <button className="btn ghost" type="button" onClick={onBack}>上一頁</button>}
+            {onPrevSection && <button className="btn ghost" type="button" onClick={onPrevSection}>上一部分</button>}
             <span className="pill">{lesson.title}</span>
             <button className="btn owl-help-btn" type="button" disabled={helpUsed || Boolean(picked)} onClick={() => onHelp(question)}>
               {helpUsed ? "已用求助" : "Owl 求助"}
@@ -1680,7 +1782,13 @@ function QuizTask({ lesson, skill, questions, speak, state, onStateChange, helpU
             ))}
           </div>
           <div className="feedback">{feedback}</div>
-          {picked && <button className="btn primary" onClick={next}>{index >= questions.length - 1 ? "完成任務" : "下一題"}</button>}
+          <div className="btns task-nav-actions">
+            <button className="btn ghost" type="button" disabled={index <= 0} onClick={previousQuestion}>上一題</button>
+            <button className="btn primary" type="button" disabled={!picked || (index >= questions.length - 1 && !allAnswered)} onClick={next}>
+              {index >= questions.length - 1 ? "完成任務" : "下一題"}
+            </button>
+            {onNextSection && <button className="btn secondary" type="button" disabled={!allAnswered} onClick={onNextSection}>下一部分</button>}
+          </div>
         </div>
       </article>
       <aside className="panel">
@@ -1691,7 +1799,7 @@ function QuizTask({ lesson, skill, questions, speak, state, onStateChange, helpU
   );
 }
 
-function SpeakTask({ lesson, speak, state, onStateChange, helpUsed, onHelp, onAnswer, onBack, onDone }: {
+function SpeakTask({ lesson, speak, state, onStateChange, helpUsed, onHelp, onAnswer, onPrevSection, onNextSection, onDone }: {
   lesson: Lesson;
   speak: (text: string, rate?: number) => void;
   state: SpeakTaskState;
@@ -1699,14 +1807,19 @@ function SpeakTask({ lesson, speak, state, onStateChange, helpUsed, onHelp, onAn
   helpUsed: boolean;
   onHelp: (answer: string) => void;
   onAnswer: (skill: Skill, label: string, correct: boolean, answer: string, correctAnswer: string) => void;
-  onBack?: () => void;
+  onPrevSection?: () => void;
+  onNextSection?: () => void;
   onDone: () => void;
 }) {
   const { done, heard, tries, transcripts = {}, scores = {}, feedback = {} } = state;
+  const safeIndex = Math.min(state.index || 0, Math.max(lesson.speak.length - 1, 0));
+  const task = lesson.speak[safeIndex];
   const [recordingId, setRecordingId] = useState<string | null>(null);
   const [speechError, setSpeechError] = useState("");
+  const [confirmFinish, setConfirmFinish] = useState(false);
   const allDone = lesson.speak.every((item) => done[item.id]);
-  const nextTask = lesson.speak.find((item) => !done[item.id]) || lesson.speak[0];
+  const lowScoreTasks = lesson.speak.filter((item) => done[item.id] && (scores[item.id] ?? 100) < 70);
+  const nextTask = lesson.speak.find((item) => !done[item.id]) || task || lesson.speak[0];
   const setTaskState = (patch: Partial<SpeakTaskState>) => onStateChange({ ...state, ...patch });
   const speechSupported = typeof window !== "undefined" && ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
 
@@ -1721,19 +1834,23 @@ function SpeakTask({ lesson, speak, state, onStateChange, helpUsed, onHelp, onAn
     }
     setSpeechError("");
     setRecordingId(task.id);
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
     try {
-      const transcript = await listenToStudentSpeech();
+      const transcript = await listenToStudentSpeech({ timeoutMs: 12000 });
       const score = scorePronunciation(task.target, transcript);
       const passed = score >= 70;
       const nextTries = (tries[task.id] || 0) + 1;
       const nextFeedback = buildSpeechFeedback(task.target, transcript, score);
       setTaskState({
+        index: safeIndex,
         heard,
         tries: { ...tries, [task.id]: nextTries },
         transcripts: { ...transcripts, [task.id]: transcript },
         scores: { ...scores, [task.id]: score },
         feedback: { ...feedback, [task.id]: nextFeedback },
-        done: passed ? { ...done, [task.id]: true } : done
+        done: { ...done, [task.id]: true }
       });
       onAnswer("speak", `${task.prompt}：${task.target}`, passed, transcript || "未辨識到聲音", task.target);
     } catch (error) {
@@ -1742,6 +1859,26 @@ function SpeakTask({ lesson, speak, state, onStateChange, helpUsed, onHelp, onAn
       setRecordingId(null);
     }
   }
+
+  function previousTask() {
+    if (safeIndex <= 0) return;
+    setTaskState({ index: safeIndex - 1 });
+  }
+
+  function nextSpeakTask() {
+    if (!task || !done[task.id] || safeIndex >= lesson.speak.length - 1) return;
+    setTaskState({ index: safeIndex + 1 });
+  }
+
+  function finishSpeaking() {
+    if (!allDone) return;
+    if (lowScoreTasks.length && !confirmFinish) {
+      setConfirmFinish(true);
+      return;
+    }
+    onDone();
+  }
+
   if (!lesson.speak.length) {
     return (
       <section className="grid two">
@@ -1759,25 +1896,38 @@ function SpeakTask({ lesson, speak, state, onStateChange, helpUsed, onHelp, onAn
         <div className="section-title">
           <h3>Speak 口說任務</h3>
           <div className="admin-actions">
-            {onBack && <button className="btn ghost" type="button" onClick={onBack}>上一頁</button>}
+            {onPrevSection && <button className="btn ghost" type="button" onClick={onPrevSection}>上一部分</button>}
             <span className="pill">AI 發音檢查</span>
             <button className="btn owl-help-btn" type="button" disabled={helpUsed || !nextTask} onClick={() => nextTask && onHelp(nextTask.target)}>
               {helpUsed ? "已用求助" : "Owl 求助"}
             </button>
           </div>
         </div>
-        {lesson.speak.map((task) => (
+        {task && (
           <div className="task-card speak-ai-card" key={task.id}>
+            <div className="review-head">
+              {lesson.speak.map((item, index) => (
+                <button
+                  className={index === safeIndex ? "pill blue" : done[item.id] ? "pill" : "pill muted-pill"}
+                  key={item.id}
+                  type="button"
+                  disabled={index > safeIndex && !done[item.id]}
+                  onClick={() => index <= safeIndex || done[item.id] ? setTaskState({ index }) : undefined}
+                >
+                  {done[item.id] ? "✓" : index + 1}
+                </button>
+              ))}
+            </div>
             <p className="eyebrow">{task.prompt}</p>
             <h3>{task.target}</h3>
-            <p className="muted">先聽範例，再按「開始朗讀」。AI 會聽你讀出的英文，判斷發音和咬字是否接近。</p>
+            <p className="muted">先聽範例，再按「開始朗讀」。AI 會聽你讀出的英文，分數未滿 70 也可以完成，但會自動加入「再挑戰」。</p>
             <div className="speak-score-card">
               <div className={`speak-score-ring ${done[task.id] ? "passed" : scores[task.id] ? "trying" : ""}`}>
                 <strong>{scores[task.id] ?? "--"}</strong>
                 <small>分</small>
               </div>
               <div>
-                <strong>{done[task.id] ? "發音通過" : scores[task.id] ? "再調整一下" : "等待朗讀"}</strong>
+                <strong>{done[task.id] ? (scores[task.id] >= 70 ? "發音通過" : "已完成，建議再練") : scores[task.id] ? "再調整一下" : "等待朗讀"}</strong>
                 <p>{feedback[task.id] || "Owl 老師會聽你的朗讀，然後告訴你要加強哪裡。"}</p>
               </div>
             </div>
@@ -1791,6 +1941,7 @@ function SpeakTask({ lesson, speak, state, onStateChange, helpUsed, onHelp, onAn
               <button className="btn secondary" onClick={() => {
                 speak(task.target, 0.78);
                 setTaskState({
+                  index: safeIndex,
                   heard: { ...heard, [task.id]: true },
                   tries
                 });
@@ -1799,14 +1950,29 @@ function SpeakTask({ lesson, speak, state, onStateChange, helpUsed, onHelp, onAn
                 <Mic size={18} /> {recordingId === task.id ? "正在聽你讀..." : done[task.id] ? "再讀一次" : "開始朗讀"}
               </button>
             </div>
+            <div className="btns task-nav-actions">
+              <button className="btn ghost" type="button" disabled={safeIndex <= 0} onClick={previousTask}>上一題</button>
+              <button className="btn primary" type="button" disabled={!done[task.id] || safeIndex >= lesson.speak.length - 1} onClick={nextSpeakTask}>下一題</button>
+              {onNextSection && <button className="btn secondary" type="button" disabled={!allDone} onClick={onNextSection}>下一部分</button>}
+            </div>
           </div>
-        ))}
+        )}
         {speechError && <div className="feedback wrong-feedback">{speechError}</div>}
-        <button className="btn primary full" disabled={!allDone} onClick={onDone}>完成口說任務</button>
+        {confirmFinish && (
+          <div className="notice-box">
+            <strong>確認完成口說任務？</strong>
+            <p>你有 {lowScoreTasks.length} 題低於 70 分，完成後會進入「再挑戰」讓你之後重練。</p>
+            <div className="btns">
+              <button className="btn primary" type="button" onClick={finishSpeaking}>確認完成</button>
+              <button className="btn ghost" type="button" onClick={() => setConfirmFinish(false)}>我再練一下</button>
+            </div>
+          </div>
+        )}
+        <button className="btn primary full" disabled={!allDone} onClick={finishSpeaking}>完成口說任務</button>
       </article>
       <aside className="panel speak-coach-panel">
         <h3>Owl 口說教室</h3>
-        <p className="muted">讀的時候靠近麥克風，慢慢說完整句子。70 分以上才算通過。</p>
+        <p className="muted">讀的時候靠近麥克風，慢慢說完整句子。低於 70 分不會卡住你，但會放進再挑戰。</p>
         <div className="speak-tip-list">
           <span>1. 先聽範例</span>
           <span>2. 再自己朗讀</span>
@@ -1817,7 +1983,7 @@ function SpeakTask({ lesson, speak, state, onStateChange, helpUsed, onHelp, onAn
   );
 }
 
-function listenToStudentSpeech(): Promise<string> {
+function listenToStudentSpeech(options: { timeoutMs?: number } = {}): Promise<string> {
   return new Promise((resolve, reject) => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -1826,17 +1992,35 @@ function listenToStudentSpeech(): Promise<string> {
     }
     const recognition = new SpeechRecognition();
     recognition.lang = "en-US";
-    recognition.interimResults = false;
+    recognition.interimResults = true;
     recognition.maxAlternatives = 1;
-    recognition.continuous = false;
+    recognition.continuous = true;
     let settled = false;
-    recognition.onresult = (event: any) => {
-      const transcript = event.results?.[0]?.[0]?.transcript || "";
+    let bestTranscript = "";
+    const timeout = window.setTimeout(() => {
+      if (settled) return;
       settled = true;
-      resolve(transcript.trim());
+      recognition.stop();
+      if (bestTranscript.trim()) resolve(bestTranscript.trim());
+      else reject(new Error("沒有聽到清楚的英文。請靠近麥克風，再慢慢讀一次。"));
+    }, options.timeoutMs || 9000);
+    recognition.onresult = (event: any) => {
+      let transcript = "";
+      for (let index = 0; index < event.results.length; index += 1) {
+        transcript += `${event.results[index]?.[0]?.transcript || ""} `;
+      }
+      bestTranscript = transcript.trim() || bestTranscript;
+      const lastResult = event.results[event.results.length - 1];
+      if (lastResult?.isFinal && bestTranscript) {
+        settled = true;
+        window.clearTimeout(timeout);
+        recognition.stop();
+        resolve(bestTranscript.trim());
+      }
     };
     recognition.onerror = (event: any) => {
       settled = true;
+      window.clearTimeout(timeout);
       const reason = event.error === "not-allowed"
         ? "瀏覽器沒有麥克風權限，請允許使用麥克風。"
         : "沒有成功聽到聲音，請再讀一次。";
@@ -1845,7 +2029,9 @@ function listenToStudentSpeech(): Promise<string> {
     recognition.onend = () => {
       if (!settled) {
         settled = true;
-        reject(new Error("沒有辨識到朗讀內容，請靠近麥克風再試一次。"));
+        window.clearTimeout(timeout);
+        if (bestTranscript.trim()) resolve(bestTranscript.trim());
+        else reject(new Error("沒有辨識到朗讀內容，請靠近麥克風再試一次。"));
       }
     };
     recognition.start();
@@ -1905,14 +2091,15 @@ function buildSpeechFeedback(target: string, transcript: string, score: number) 
   return "再試一次。句子聽起來接近，但咬字還不夠清楚，請放慢速度。";
 }
 
-function WriteTask({ lesson, state, onStateChange, helpUsed, onHelp, onAnswer, onBack, onDone }: {
+function WriteTask({ lesson, state, onStateChange, helpUsed, onHelp, onAnswer, onPrevSection, onNextSection, onDone }: {
   lesson: Lesson;
   state: WriteTaskState;
   onStateChange: (state: WriteTaskState) => void;
   helpUsed: boolean;
   onHelp: (answer: string) => void;
   onAnswer: (skill: Skill, label: string, correct: boolean, answer: string, correctAnswer: string) => void;
-  onBack?: () => void;
+  onPrevSection?: () => void;
+  onNextSection?: () => void;
   onDone: () => void;
 }) {
   const safeIndex = Math.min(state.index || 0, Math.max(lesson.write.length - 1, 0));
@@ -1937,7 +2124,7 @@ function WriteTask({ lesson, state, onStateChange, helpUsed, onHelp, onAnswer, o
         <div className="section-title">
           <h3>Write 寫作任務 · {safeIndex + 1}/{lesson.write.length}</h3>
           <div className="admin-actions">
-            {onBack && <button className="btn ghost" type="button" onClick={onBack}>上一頁</button>}
+            {onPrevSection && <button className="btn ghost" type="button" onClick={onPrevSection}>上一部分</button>}
             <span className="pill">由簡到難</span>
             <button className="btn owl-help-btn" type="button" disabled={helpUsed || !task || Boolean(checked[task.id])} onClick={() => task && onHelp(task.answerHint.trim())}>
               {helpUsed ? "已用求助" : "Owl 求助"}
@@ -1987,12 +2174,14 @@ function WriteTask({ lesson, state, onStateChange, helpUsed, onHelp, onAnswer, o
               </p>
             )}
             {checked[task.id] && (
-              <div className="btns">
+              <div className="btns task-nav-actions">
+                <button className="btn ghost" type="button" disabled={safeIndex <= 0} onClick={() => setTaskState({ index: safeIndex - 1 })}>上一題</button>
                 {safeIndex < lesson.write.length - 1 ? (
                   <button className="btn primary" type="button" onClick={() => setTaskState({ index: safeIndex + 1 })}>下一題</button>
                 ) : (
                   <button className="btn primary" type="button" disabled={!complete} onClick={onDone}>完成寫作任務</button>
                 )}
+                {onNextSection && <button className="btn secondary" type="button" disabled={!complete} onClick={onNextSection}>下一部分</button>}
               </div>
             )}
           </div>
@@ -2110,6 +2299,7 @@ function ScenarioDialogue({
 }) {
   const [input, setInput] = useState("");
   const [listening, setListening] = useState(false);
+  const [thinking, setThinking] = useState(false);
   const [error, setError] = useState("");
 
   function startScenario(scenario: DialogueScenario) {
@@ -2119,13 +2309,17 @@ function ScenarioDialogue({
     window.setTimeout(() => speak(scenario.opening, 0.88, scenario.voice), 120);
   }
 
-  function sendStudentMessage(text: string) {
+  async function sendStudentMessage(text: string) {
     if (!activeScenario || !text.trim()) return;
     const studentMessage = { role: "student" as const, text: text.trim() };
-    const aiText = generateDialogueReply(activeScenario, text, messages.length);
-    const nextMessages = [...messages, studentMessage, { role: "ai" as const, text: aiText }];
-    setMessages(nextMessages);
+    const conversation = [...messages, studentMessage];
+    setMessages(conversation);
     setInput("");
+    setThinking(true);
+    const aiText = await requestDialogueReply(activeScenario, conversation);
+    const nextMessages = [...conversation, { role: "ai" as const, text: aiText }];
+    setMessages(nextMessages);
+    setThinking(false);
     speak(aiText, 0.88, activeScenario.voice);
   }
 
@@ -2134,7 +2328,7 @@ function ScenarioDialogue({
     setListening(true);
     try {
       const transcript = await listenToStudentSpeech();
-      sendStudentMessage(transcript);
+      await sendStudentMessage(transcript);
     } catch (event) {
       setError(event instanceof Error ? event.message : "沒有成功聽到聲音。");
     } finally {
@@ -2208,15 +2402,21 @@ function ScenarioDialogue({
               <p>{message.text}</p>
             </div>
           ))}
+          {thinking && (
+            <div className="dialogue-message ai thinking">
+              <span>{activeScenario.cover}</span>
+              <p>AI 正在想一個自然的回應...</p>
+            </div>
+          )}
         </div>
         <div className="dialogue-input-row">
           <input value={input} onChange={(event) => setInput(event.target.value)} placeholder="Type your English reply..." onKeyDown={(event) => {
-            if (event.key === "Enter") sendStudentMessage(input);
+            if (event.key === "Enter") void sendStudentMessage(input);
           }} />
-          <button className="btn secondary" type="button" disabled={listening} onClick={useVoiceInput}>
+          <button className="btn secondary" type="button" disabled={listening || thinking} onClick={useVoiceInput}>
             <Mic size={18} /> {listening ? "Listening..." : "語音"}
           </button>
-          <button className="btn primary" type="button" onClick={() => sendStudentMessage(input)}>送出</button>
+          <button className="btn primary" type="button" disabled={thinking} onClick={() => void sendStudentMessage(input)}>送出</button>
         </div>
         {error && <p className="form-error">{error}</p>}
       </article>
@@ -2235,6 +2435,33 @@ function ScenarioDialogue({
       )}
     </section>
   );
+}
+
+async function requestDialogueReply(scenario: DialogueScenario, messages: DialogueMessage[]) {
+  try {
+    const response = await fetch("/api/dialogue", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        scenario: {
+          title: scenario.title,
+          role: scenario.role,
+          level: scenario.level,
+          goal: scenario.goal,
+          setting: scenario.setting
+        },
+        messages
+      })
+    });
+    if (!response.ok) throw new Error("AI API unavailable");
+    const data = await response.json();
+    if (typeof data.reply === "string" && data.reply.trim()) return data.reply.trim();
+  } catch {
+    const lastStudentMessage = messages.filter((message) => message.role === "student").at(-1)?.text || "";
+    return generateDialogueReply(scenario, lastStudentMessage, messages.length);
+  }
+  const lastStudentMessage = messages.filter((message) => message.role === "student").at(-1)?.text || "";
+  return generateDialogueReply(scenario, lastStudentMessage, messages.length);
 }
 
 function generateDialogueReply(scenario: DialogueScenario, studentText: string, turn: number) {
@@ -2272,7 +2499,7 @@ function isWritingCorrect(answer: string, correctAnswer: string) {
   });
 }
 
-function findReviewContext(label: string, lessons: Lesson[]): { word?: Word; question?: ChoiceQuestion; writing?: WritingTask; lesson?: Lesson } {
+function findReviewContext(label: string, lessons: Lesson[]): { word?: Word; question?: ChoiceQuestion; speaking?: SpeakingTask; writing?: WritingTask; lesson?: Lesson } {
   const wordLabel = label.replace(/^單字：/, "");
   for (const lesson of lessons) {
     const word = lesson.words.find((item) => item.word === wordLabel);
@@ -2281,6 +2508,9 @@ function findReviewContext(label: string, lessons: Lesson[]): { word?: Word; que
     const generatedQuestions = [...buildLessonPracticeQuestions(lesson, "listen"), ...buildLessonPracticeQuestions(lesson, "read")];
     const question = [...lesson.listen, ...lesson.read, ...generatedQuestions].find((item) => item.prompt === label);
     if (question) return { question, lesson };
+
+    const speaking = lesson.speak.find((item) => `${item.prompt}：${item.target}` === label || item.target === label);
+    if (speaking) return { speaking, lesson };
 
     const writing = lesson.write.find((item) => `${item.prompt}：${item.starter}` === label);
     if (writing) return { writing, lesson };
@@ -2366,19 +2596,34 @@ function buildAiReviewExercises(items: { label: string; skill: Skill }[], lesson
 function Review({ progress, lessons, speak, onAnswer }: {
   progress: StudentProgress;
   lessons: Lesson[];
-  speak: (text: string) => void;
+  speak: (text: string, rate?: number) => void;
   onAnswer: (label: string, skill: Skill, correct: boolean, lessonId?: string, answer?: string, correctAnswer?: string) => void;
 }) {
   const items = Object.values(progress.mistakes);
   const [filter, setFilter] = useState<"all" | "due" | "later">("all");
+  const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
   const [picked, setPicked] = useState<Record<string, string>>({});
   const [written, setWritten] = useState<Record<string, string>>({});
   const [feedback, setFeedback] = useState<Record<string, string>>({});
+  const [reviewSpeech, setReviewSpeech] = useState<Record<string, { transcript: string; score: number }>>({});
+  const [recording, setRecording] = useState<string | null>(null);
   const today = new Date().toISOString().slice(0, 10);
   const dueItems = items.filter((item) => item.nextReview <= today);
   const laterItems = items.filter((item) => item.nextReview > today);
   const visibleItems = filter === "due" ? dueItems : filter === "later" ? laterItems : items;
   const aiExercises = useMemo(() => buildAiReviewExercises(visibleItems, lessons), [visibleItems, lessons]);
+  const groupedLessons = useMemo(() => {
+    return visibleItems.reduce((groups, item) => {
+      const context = findReviewContext(item.label, lessons);
+      const groupKey = context.lesson?.id || "unknown";
+      const title = context.lesson?.title || "其他複習";
+      const cover = context.lesson?.cover || "🚩";
+      if (!groups[groupKey]) groups[groupKey] = { lesson: context.lesson, title, cover, items: [] as typeof visibleItems };
+      groups[groupKey].items.push(item);
+      return groups;
+    }, {} as Record<string, { lesson?: Lesson; title: string; cover: string; items: typeof visibleItems }>);
+  }, [lessons, visibleItems]);
+  const selectedGroup = selectedLessonId ? groupedLessons[selectedLessonId] : null;
 
   function choose(item: { label: string; skill: Skill }, question: ChoiceQuestion, answer: string, reviewLessonId?: string) {
     const correct = answer === question.answer;
@@ -2388,6 +2633,25 @@ function Review({ progress, lessons, speak, onAnswer }: {
       [item.label]: correct ? "答對了！這題會慢慢從再挑戰中移除。" : `再練一次，正確答案是 ${question.answer}。`
     }));
     onAnswer(item.label, item.skill, correct, reviewLessonId, answer, question.answer);
+  }
+
+  async function practiceSpeech(item: { label: string; skill: Skill }, lesson: Lesson | undefined, task: SpeakingTask) {
+    setRecording(item.label);
+    if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
+    try {
+      const transcript = await listenToStudentSpeech({ timeoutMs: 12000 });
+      const score = scorePronunciation(task.target, transcript);
+      setReviewSpeech((current) => ({ ...current, [item.label]: { transcript, score } }));
+      setFeedback((current) => ({
+        ...current,
+        [item.label]: score >= 70 ? "口說通過，這題會慢慢從再挑戰移除。" : `目前 ${score} 分，建議再聽範例重讀一次。`
+      }));
+      onAnswer(item.label, "speak", score >= 70, lesson?.id, transcript || "未辨識到聲音", task.target);
+    } catch (event) {
+      setFeedback((current) => ({ ...current, [item.label]: event instanceof Error ? event.message : "沒有成功聽到聲音，請再試一次。" }));
+    } finally {
+      setRecording(null);
+    }
   }
 
   function submitWriting(item: { label: string; skill: Skill }, lesson: Lesson | undefined, task: WritingTask) {
@@ -2406,132 +2670,154 @@ function Review({ progress, lessons, speak, onAnswer }: {
       <div className="section-title">
         <div>
           <h3>再挑戰</h3>
-          <p className="muted">答錯或標記需要複習的內容會進入這裡，按日期安排複習。</p>
+          <p className="muted">先選擇單元，再重練該單元的聽、說、讀、寫錯題。</p>
         </div>
         <span className="pill blue">{items.length} 個項目</span>
       </div>
       <div className="segmented">
-        <button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>全部 {items.length}</button>
-        <button className={filter === "due" ? "active" : ""} onClick={() => setFilter("due")}>今天要複習 {dueItems.length}</button>
-        <button className={filter === "later" ? "active" : ""} onClick={() => setFilter("later")}>之後複習 {laterItems.length}</button>
+        <button className={filter === "all" ? "active" : ""} onClick={() => { setFilter("all"); setSelectedLessonId(null); }}>全部 {items.length}</button>
+        <button className={filter === "due" ? "active" : ""} onClick={() => { setFilter("due"); setSelectedLessonId(null); }}>今天要複習 {dueItems.length}</button>
+        <button className={filter === "later" ? "active" : ""} onClick={() => { setFilter("later"); setSelectedLessonId(null); }}>之後複習 {laterItems.length}</button>
       </div>
-      {aiExercises.length > 0 && (
-        <article className="panel ai-practice-panel">
-          <div className="section-title compact">
-            <div>
-              <p className="eyebrow">AI Practice</p>
-              <h3>AI 加強練習</h3>
-              <p className="muted">根據目前錯題自動生成幾題相似練習，先用簡單版 AI 規則產生。</p>
-            </div>
+
+      {!selectedGroup && aiExercises.length > 0 && (
+        <article className="panel ai-practice-panel review-ai-panel">
+          <div>
+            <p className="eyebrow">AI Practice</p>
+            <h3>AI 加強練習</h3>
+            <p className="muted">系統會根據目前錯題產生相似題，之後可接真正 AI 出題。</p>
           </div>
-          <div className="grid cards">
-            {aiExercises.map((exercise) => {
-              const selected = picked[exercise.id];
-              return (
-                <div className="mini-practice" key={exercise.id}>
-                  <span className="pill blue">{exercise.lessonTitle}</span>
-                  <h3>{exercise.question.prompt}</h3>
-                  <div className="options review-options">
-                    {exercise.question.options.map((option) => (
-                      <button
-                        key={option}
-                        className={`option ${selected && option === exercise.question.answer ? "correct" : ""} ${selected === option && option !== exercise.question.answer ? "wrong" : ""}`}
-                        onClick={() => {
-                          setPicked((current) => ({ ...current, [exercise.id]: option }));
-                          setFeedback((current) => ({
-                            ...current,
-                            [exercise.id]: option === exercise.question.answer ? "答對了，這題是 AI 加強練習。" : `再想想，答案是 ${exercise.question.answer}。`
-                          }));
-                        }}
-                      >
-                        {option}
-                      </button>
-                    ))}
-                  </div>
-                  {feedback[exercise.id] && <p className="success-text">{feedback[exercise.id]}</p>}
+        </article>
+      )}
+
+      {!selectedGroup ? (
+        <div className="review-unit-grid">
+          {Object.entries(groupedLessons).length ? Object.entries(groupedLessons).map(([groupId, group]) => {
+            const skills = unique(group.items.map((item) => skillLabels[item.skill]));
+            const dueCount = group.items.filter((item) => item.nextReview <= today).length;
+            return (
+              <article className="review-unit-card" key={groupId}>
+                <div className="scenario-cover">{group.cover}</div>
+                <div>
+                  <span className="pill blue">{group.items.length} 題再挑戰</span>
+                  <h3>{group.title}</h3>
+                  <p className="muted">{skills.join(" / ")} · 今天要複習 {dueCount} 題</p>
                 </div>
+                <button className="btn primary full" type="button" onClick={() => setSelectedLessonId(groupId)}>進入這個單元</button>
+              </article>
+            );
+          }) : <div className="panel"><h3>目前沒有再挑戰項目</h3><p className="muted">做得很好。答錯或需要複習的內容會出現在這裡。</p></div>}
+        </div>
+      ) : (
+        <article className="panel review-detail-page">
+          <div className="section-title">
+            <div>
+              <p className="eyebrow">Review Unit</p>
+              <h3>{selectedGroup.cover} {selectedGroup.title}</h3>
+              <p className="muted">這裡只顯示本單元需要重練的題目。</p>
+            </div>
+            <button className="btn ghost" type="button" onClick={() => setSelectedLessonId(null)}>返回單元列表</button>
+          </div>
+          <div className="review-detail-list">
+            {selectedGroup.items.map((item) => {
+              const context = findReviewContext(item.label, lessons);
+              const selected = picked[item.label];
+              const speech = reviewSpeech[item.label];
+              return (
+                <article className="review-detail-card" key={item.label}>
+                  <div className="review-head">
+                    <span className="pill">{skillLabels[item.skill]}</span>
+                    <span className="pill blue">錯 {item.count} 次</span>
+                    <span className="pill">下次：{item.nextReview}</span>
+                  </div>
+
+                  {context.word ? (
+                    <>
+                      <div className="emoji">{context.word.image}</div>
+                      <h3>{context.word.word}</h3>
+                      <p>{context.word.meaning} · {context.word.part}</p>
+                      <p className="muted">{context.word.example}<br />{context.word.translation}</p>
+                      <button className="btn secondary" onClick={() => speak(context.word?.word || item.label)}>
+                        <Headphones size={18} /> 發音
+                      </button>
+                    </>
+                  ) : context.speaking ? (
+                    <>
+                      <p className="eyebrow">口說重練</p>
+                      <h3>{context.speaking.target}</h3>
+                      <p className="muted">{context.speaking.prompt}</p>
+                      <div className="btns">
+                        <button className="btn secondary" type="button" onClick={() => speak(context.speaking?.target || item.label, 0.78)}>
+                          <Headphones size={18} /> 聽範例
+                        </button>
+                        <button className="btn primary" type="button" disabled={recording === item.label} onClick={() => practiceSpeech(item, context.lesson, context.speaking as SpeakingTask)}>
+                          <Mic size={18} /> {recording === item.label ? "正在聽你讀..." : "開始朗讀"}
+                        </button>
+                      </div>
+                      {speech && (
+                        <div className="speech-transcript">
+                          <span>AI 聽到：</span>
+                          <strong>{speech.transcript}</strong>
+                          <span>{speech.score} 分</span>
+                        </div>
+                      )}
+                    </>
+                  ) : context.question ? (
+                    <>
+                      <p className="eyebrow">重新練習</p>
+                      <h3>{context.question.prompt}</h3>
+                      {context.question.audio && (
+                        <button className="btn secondary" onClick={() => speak(context.question?.audio || context.question?.prompt || item.label, 0.9)}>
+                          <Headphones size={18} /> 重聽
+                        </button>
+                      )}
+                      <div className="options review-options">
+                        {shuffleQuestionOptions(context.question.options, context.question.answer, `review-${context.question.id}`).map((option) => (
+                          <button
+                            key={option}
+                            className={`option ${selected && option === context.question?.answer ? "correct" : ""} ${selected === option && option !== context.question?.answer ? "wrong" : ""}`}
+                            onClick={() => choose(item, context.question as ChoiceQuestion, option, context.lesson?.id)}
+                          >
+                            {option}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  ) : context.writing ? (
+                    <>
+                      <p className="eyebrow">寫作重練</p>
+                      <h3>用英文表達：{context.lesson ? writingMeaningHint(context.writing, context.lesson) : context.writing.starter}</h3>
+                      <p className="muted">句型線索：{context.writing.starter.replace("____", "______")}</p>
+                      <textarea
+                        rows={3}
+                        className="review-textarea"
+                        placeholder="重新寫一次答案"
+                        value={written[item.label] || ""}
+                        onChange={(event) => setWritten((current) => ({ ...current, [item.label]: event.target.value }))}
+                      />
+                      <button className="btn secondary" disabled={!written[item.label]?.trim()} onClick={() => submitWriting(item, context.lesson, context.writing as WritingTask)}>
+                        提交重練答案
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="eyebrow">複習項目</p>
+                      <h3>{item.label}</h3>
+                      <p className="muted">這個項目已記錄，之後可接更完整的題型。</p>
+                    </>
+                  )}
+
+                  {feedback[item.label] && <p className={feedback[item.label].includes("答對") || feedback[item.label].includes("通過") ? "success-text" : "form-error"}>{feedback[item.label]}</p>}
+                  <div className="btns review-actions">
+                    <button className="btn ghost" onClick={() => onAnswer(item.label, item.skill, true, context.lesson?.id)}>我會了</button>
+                    <button className="btn ghost" onClick={() => onAnswer(item.label, item.skill, false, context.lesson?.id)}>再練一次</button>
+                  </div>
+                </article>
               );
             })}
           </div>
         </article>
       )}
-      <div className="grid cards">
-        {visibleItems.length ? visibleItems.map((item) => {
-          const context = findReviewContext(item.label, lessons);
-          const selected = picked[item.label];
-          return (
-            <article className="card review-card" key={item.label}>
-              <div className="review-card-main">
-                <div className="review-head">
-                  <span className="pill">{skillLabels[item.skill]}</span>
-                  {context.lesson && <span className="pill blue">{context.lesson.title}</span>}
-                </div>
-
-                {context.word ? (
-                  <>
-                    <div className="emoji">{context.word.image}</div>
-                    <h3>{context.word.word}</h3>
-                    <p>{context.word.meaning} · {context.word.part}</p>
-                    <p className="muted">{context.word.example}<br />{context.word.translation}</p>
-                  </>
-                ) : context.question ? (
-                  <>
-                    <p className="eyebrow">重新練習</p>
-                    <h3>{context.question.prompt}</h3>
-                    {context.question.audio && (
-                      <button className="btn secondary" onClick={() => speak(context.question?.audio || context.question?.prompt || item.label)}>
-                        <Headphones size={18} /> 重聽
-                      </button>
-                    )}
-                    <div className="options review-options">
-                      {context.question.options.map((option) => (
-                        <button
-                          key={option}
-                          className={`option ${selected && option === context.question?.answer ? "correct" : ""} ${selected === option && option !== context.question?.answer ? "wrong" : ""}`}
-                          onClick={() => choose(item, context.question as ChoiceQuestion, option, context.lesson?.id)}
-                        >
-                          {option}
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                ) : context.writing ? (
-                  <>
-                    <p className="eyebrow">寫作重練</p>
-                    <h3>{context.writing.starter}</h3>
-                    <p className="muted">提示：{context.lesson ? friendlyWritingHint(context.writing, context.lesson) : "先看空格前後文，再選最自然的字。"}</p>
-                    <textarea
-                      rows={3}
-                      className="review-textarea"
-                      placeholder="重新寫一次答案"
-                      value={written[item.label] || ""}
-                      onChange={(event) => setWritten((current) => ({ ...current, [item.label]: event.target.value }))}
-                    />
-                    <button className="btn secondary" disabled={!written[item.label]?.trim()} onClick={() => submitWriting(item, context.lesson, context.writing as WritingTask)}>
-                      提交重練答案
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <p className="eyebrow">複習項目</p>
-                    <h3>{item.label}</h3>
-                    <p className="muted">這個項目已記錄，之後可接更完整的題型。</p>
-                  </>
-                )}
-
-                <p className="muted">錯誤次數：{item.count}<br />下次複習：{item.nextReview}</p>
-                {feedback[item.label] && <p className="success-text">{feedback[item.label]}</p>}
-              </div>
-
-              <div className="btns review-actions">
-                {context.word && <button className="btn secondary" onClick={() => speak(context.word?.word || item.label)}>發音</button>}
-                <button className="btn ghost" onClick={() => onAnswer(item.label, item.skill, true, context.lesson?.id)}>我會了</button>
-                <button className="btn ghost" onClick={() => onAnswer(item.label, item.skill, false, context.lesson?.id)}>再練一次</button>
-              </div>
-            </article>
-          );
-        }) : <div className="panel"><h3>這一類目前沒有項目</h3><p className="muted">做得很好。答錯或需要複習的內容會出現在這裡。</p></div>}
-      </div>
     </section>
   );
 }

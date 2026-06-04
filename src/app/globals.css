@@ -1816,6 +1816,72 @@ button.pill {
   color: #ff5d7d;
   font-weight: 900;
 }
+.task-nav-actions {
+  margin-top: 18px;
+  align-items: center;
+}
+.task-nav-actions .btn:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+  transform: none;
+}
+.review-unit-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  gap: 18px;
+  margin-top: 18px;
+}
+.review-unit-card {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+  min-height: 280px;
+  padding: 22px;
+  border: 3px solid #fff;
+  border-radius: 30px;
+  background:
+    radial-gradient(circle at 90% 10%, rgba(255, 226, 122, .26), transparent 8rem),
+    radial-gradient(circle at 12% 20%, rgba(126, 212, 255, .22), transparent 8rem),
+    linear-gradient(180deg, rgba(255,255,255,.96), rgba(246,251,255,.92));
+  box-shadow: var(--cartoon-shadow);
+}
+.review-unit-card h3 {
+  margin: 10px 0 6px;
+  font-size: 26px;
+}
+.review-ai-panel {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 18px 0;
+  background:
+    radial-gradient(circle at 95% 12%, rgba(255, 116, 146, .16), transparent 8rem),
+    linear-gradient(135deg, #fff, #f7fbff);
+}
+.review-detail-page {
+  margin-top: 18px;
+}
+.review-detail-list {
+  display: grid;
+  gap: 18px;
+}
+.review-detail-card {
+  padding: 20px;
+  border: 2px solid #dce8ff;
+  border-radius: 26px;
+  background:
+    radial-gradient(circle at 95% 12%, rgba(126, 212, 255, .16), transparent 7rem),
+    #fff;
+  box-shadow: 0 14px 28px rgba(73, 126, 219, .08);
+}
+.review-detail-card h3 {
+  margin: 10px 0;
+}
+.review-detail-card .emoji {
+  width: 68px;
+  height: 68px;
+  font-size: 36px;
+}
 .writing-meaning-card,
 .story-mini-box {
   margin: 14px 0;
@@ -1958,6 +2024,10 @@ button.pill {
   padding: 14px 16px;
   font: inherit;
   font-weight: 800;
+}
+.dialogue-message.thinking p {
+  color: var(--muted);
+  font-style: italic;
 }
 .owl-help-backdrop {
   position: fixed;
