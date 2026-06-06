@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { bossTravelLesson } from "@/data/boss-travel";
 import { appLessons } from "@/data/lessons";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { isSupabaseReady, signInStaff, signOut } from "@/lib/auth";
 import { mergePublishedLessons } from "@/lib/course-drafts";
 import { defaultLearningLevel, learningLevelLabels, lessonDifficulty } from "@/lib/learning-levels";
@@ -176,6 +177,7 @@ export function AdminApp() {
             <h1>Teacher Hub</h1>
             <p>{role === "admin" ? "Admin 管理員" : "Teacher 教師"}</p>
           </div>
+          <ThemeToggle />
         </div>
         {profile && (
           <div className="student-chip">

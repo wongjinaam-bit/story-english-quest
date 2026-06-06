@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Headphones, LogOut, Mic, QrCode, Sparkles, Star, UserRound } from "lucide-react";
 import { bossTravelLesson } from "@/data/boss-travel";
 import { appLessons } from "@/data/lessons";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { isSupabaseReady, signInStudent, signOut, signUpStudent } from "@/lib/auth";
 import { mergePublishedLessons } from "@/lib/course-drafts";
 import { defaultLearningLevel, learningLevelDescriptions, learningLevelLabels, lessonDifficulty } from "@/lib/learning-levels";
@@ -50,6 +51,14 @@ type WritingFeedback = {
 type DialogueMessage = {
   role: "ai" | "student";
   text: string;
+};
+
+type DialogueHistoryItem = {
+  id: number;
+  scenarioId: string;
+  title: string;
+  date: string;
+  messages: DialogueMessage[];
 };
 
 type DialogueScenario = {
@@ -608,7 +617,26 @@ export function StudentApp() {
   }
 
   function completeBossSkill(skill: Skill) {
-    mutateProgress((draft) => recordSkill(draft, bossTravelLesson.id, skill));
+    mutateProgress((draft) => {
+      recordSkill(draft, bossTravelLesson.id, skill);
+      const latestAnswers = new Map<string, boolean>();
+      draft.answers
+        .filter((item) => item.lessonId === bossTravelLesson.id && item.skill === skill)
+        .forEach((item) => latestAnswers.set(item.label || `${item.skill}-${latestAnswers.size}`, item.correct));
+      const expectedCount = skill === "listen"
+        ? bossTravelLesson.listen.length
+        : skill === "read"
+          ? bossTravelLesson.read.length
+          : skill === "speak"
+            ? bossTravelLesson.speak.length
+            : bossTravelLesson.write.length;
+      const correctCount = Array.from(latestAnswers.values()).filter(Boolean).length;
+      const accuracy = expectedCount ? correctCount / expectedCount : 0;
+      draft.bossCrowns = {
+        ...(draft.bossCrowns || {}),
+        [skill]: accuracy >= 1 ? 2 : accuracy >= 0.8 ? 1 : 0
+      };
+    });
     setBossGate(null);
   }
 
@@ -827,6 +855,7 @@ export function StudentApp() {
             <h1>Story English Quest</h1>
             <p>迷你故事英文任務</p>
           </div>
+          <ThemeToggle />
         </div>
 
         <div className="student-chip">
@@ -1101,6 +1130,7 @@ export function StudentApp() {
             activeGate={bossGate}
             setActiveGate={setBossGate}
             completedSkills={progress.completedSkills[bossTravelLesson.id] || []}
+            crowns={progress.bossCrowns || {}}
             quizStateFor={(skill) => quizStateFor(skill, bossTravelLesson.id)}
             updateQuizState={(skill, state) => updateQuizState(skill, state, bossTravelLesson.id)}
             speakState={speakStateFor(bossTravelLesson.id)}
@@ -1261,6 +1291,7 @@ function BossTravelChallenge({
   activeGate,
   setActiveGate,
   completedSkills,
+  crowns,
   quizStateFor,
   updateQuizState,
   speakState,
@@ -1277,6 +1308,7 @@ function BossTravelChallenge({
   activeGate: Skill | null;
   setActiveGate: (skill: Skill | null) => void;
   completedSkills: Skill[];
+  crowns: Partial<Record<Skill, number>>;
   quizStateFor: (skill: Skill) => QuizTaskState;
   updateQuizState: (skill: Skill, state: QuizTaskState) => void;
   speakState: SpeakTaskState;
@@ -1293,6 +1325,7 @@ function BossTravelChallenge({
   const [showCg, setShowCg] = useState(true);
   const seenKey = `seq-boss-travel-cg-seen-${studentId}`;
   const allComplete = (["listen", "speak", "read", "write"] as Skill[]).every((skill) => completedSkills.includes(skill));
+  const crownTotal = Object.values(crowns).reduce((total, count) => total + (count || 0), 0);
   const gateMeta: Record<Skill, { icon: string; title: string; subtitle: string; count: number }> = {
     listen: { icon: "🎧", title: "Listening Expedition", subtitle: "從關鍵字聽辨到主旨判斷", count: bossTravelLesson.listen.length },
     speak: { icon: "🎙️", title: "Speaking Summit", subtitle: "從清楚咬字到完整表達觀點", count: bossTravelLesson.speak.length },
@@ -1398,6 +1431,10 @@ function BossTravelChallenge({
             <span style={{ width: `${(completedSkills.length / 4) * 100}%` }} />
           </div>
           <strong>{completedSkills.length}/4 核心關卡完成</strong>
+          <div className="boss-crown-total" aria-label={`共獲得 ${crownTotal} 個皇冠`}>
+            <span>{crownTotal ? "👑".repeat(crownTotal) : "尚未獲得皇冠"}</span>
+            <small>每關 80% 得 1 皇冠，全對得 2 皇冠</small>
+          </div>
         </div>
         <div className="boss-globe">🌍</div>
         <button className="btn secondary" type="button" onClick={() => setShowCg(true)}>重播 CG</button>
@@ -1406,13 +1443,14 @@ function BossTravelChallenge({
         {(["listen", "speak", "read", "write"] as Skill[]).map((skill, index) => {
           const meta = gateMeta[skill];
           const complete = completedSkills.includes(skill);
+          const crownCount = crowns[skill] || 0;
           return (
             <button className={`boss-gate ${complete ? "complete" : ""}`} type="button" key={skill} onClick={() => setActiveGate(skill)}>
               <span className="boss-gate-number">0{index + 1}</span>
-              <span className="boss-gate-icon">{complete ? "👑" : meta.icon}</span>
+              <span className="boss-gate-icon">{complete ? crownCount ? "👑".repeat(crownCount) : "✓" : meta.icon}</span>
               <strong>{meta.title}</strong>
               <small>{meta.subtitle}</small>
-              <em>{meta.count} 個小關卡 · {complete ? "已通過" : "進入挑戰"}</em>
+              <em>{meta.count} 個小關卡 · {complete ? crownCount ? `獲得 ${crownCount} 皇冠` : "已完成，未達 80%" : "進入挑戰"}</em>
             </button>
           );
         })}
@@ -1463,7 +1501,7 @@ function BossCgOverlay({ seenKey, onClose }: { seenKey: string; onClose: () => v
   return (
     <div className={`boss-cg-backdrop ${seenBefore ? "skippable" : ""}`} onClick={() => seenBefore && onClose()}>
       <div className="boss-cg-frame" onClick={(event) => event.stopPropagation()}>
-        <video ref={videoRef} autoPlay muted playsInline onPlay={() => setPlaying(true)} onEnded={finish} src="/boss-travel-intro.mp4" />
+        <video ref={videoRef} autoPlay={seenBefore} playsInline onPlay={() => setPlaying(true)} onEnded={finish} src="/boss-travel-intro.mp4" />
         {!playing && (
           <button className="boss-cg-play" type="button" onClick={() => videoRef.current?.play()}>
             <span>▶</span>
@@ -2190,6 +2228,7 @@ function QuizTask({ lesson, skill, questions, speak, state, onStateChange, secti
   onNextSection?: () => void;
   onDone: () => void;
 }) {
+  const [passageOpen, setPassageOpen] = useState(false);
   const pickedById = state.pickedById || {};
   const feedbackById = state.feedbackById || {};
   const { index } = state;
@@ -2309,7 +2348,11 @@ function QuizTask({ lesson, skill, questions, speak, state, onStateChange, secti
       <aside className="panel">
         <h3>任務小提醒</h3>
         <p className="muted">答錯會進入「再挑戰」，之後可以按技能分類複習。</p>
+        {skill === "read" && (
+          <button className="btn secondary full" type="button" onClick={() => setPassageOpen(true)}>查看全文</button>
+        )}
       </aside>
+      {passageOpen && <PassageLibrary lesson={lesson} title="閱讀全文" onClose={() => setPassageOpen(false)} />}
     </section>
   );
 }
@@ -2564,9 +2607,14 @@ function startStudentSpeechSession({
     if (settled) return;
     settled = true;
     window.clearTimeout(timeout);
-    const reason = event.error === "not-allowed"
-      ? "瀏覽器沒有麥克風權限，請允許使用麥克風。"
-      : "沒有成功聽到聲音，請再讀一次。";
+    const reasons: Record<string, string> = {
+      "not-allowed": "瀏覽器沒有麥克風權限，請在網址列允許使用麥克風。",
+      "service-not-allowed": "瀏覽器未允許語音辨識服務，請使用最新版 Chrome 或 Edge。",
+      "audio-capture": "找不到可用的麥克風，請檢查裝置的麥克風設定。",
+      "no-speech": "沒有聽到聲音，請靠近麥克風並再說一次。",
+      network: "語音辨識服務暫時無法連線，請檢查網路後再試一次。"
+    };
+    const reason = reasons[event.error] || "沒有成功辨識到英文，請再試一次。";
     onError(new Error(reason));
   };
   recognition.onend = () => {
@@ -2652,6 +2700,7 @@ function WriteTask({ lesson, state, onStateChange, sectionCompleted = false, hel
   onNextSection?: () => void;
   onDone: () => void;
 }) {
+  const [passageOpen, setPassageOpen] = useState(false);
   const safeIndex = Math.min(state.index || 0, Math.max(lesson.write.length - 1, 0));
   const { answers, checked, aiTips } = state;
   const task = lesson.write[safeIndex];
@@ -2737,15 +2786,39 @@ function WriteTask({ lesson, state, onStateChange, sectionCompleted = false, hel
       </article>
       <aside className="panel writing-side-panel">
         <h3>寫作支援</h3>
-        <p className="muted">可以按上一頁回到閱讀、口說、聽力、單字和故事，不會清空已寫內容。</p>
-        <div className="story-mini-box">
-          <strong>本課故事提醒</strong>
-          {lesson.sentences.slice(0, 3).map((line) => (
-            <p key={line.en}>{line.en}<br /><span>{line.zh}</span></p>
+        <p className="muted">需要參考文章時，按下按鈕即可在中央開啟全文。關閉後會回到目前寫作題目。</p>
+        <button className="btn secondary full" type="button" onClick={() => setPassageOpen(true)}>查看全文</button>
+      </aside>
+      {passageOpen && <PassageLibrary lesson={lesson} title="寫作參考全文" onClose={() => setPassageOpen(false)} />}
+    </section>
+  );
+}
+
+function PassageLibrary({ lesson, title, onClose }: { lesson: Lesson; title: string; onClose: () => void }) {
+  return (
+    <div className="passage-backdrop" role="dialog" aria-modal="true" aria-label={title}>
+      <article className="passage-page">
+        <header>
+          <div>
+            <p className="eyebrow">{lesson.topic}</p>
+            <h3>{title}</h3>
+            <p className="muted">{lesson.title}</p>
+          </div>
+          <button className="btn ghost" type="button" onClick={onClose}>收起全文</button>
+        </header>
+        <div className="passage-content">
+          {lesson.sentences.map((line, index) => (
+            <section key={`${line.en}-${index}`}>
+              <span>{index + 1}</span>
+              <div>
+                <p>{line.en}</p>
+                <small>{line.zh}</small>
+              </div>
+            </section>
           ))}
         </div>
-      </aside>
-    </section>
+      </article>
+    </div>
   );
 }
 
@@ -2855,6 +2928,16 @@ function ScenarioDialogue({
   const [aiMode, setAiMode] = useState<"unknown" | "ai" | "simple">("unknown");
   const [error, setError] = useState("");
   const [aiError, setAiError] = useState("");
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyItems, setHistoryItems] = useState<DialogueHistoryItem[]>([]);
+  const [selectedHistory, setSelectedHistory] = useState<DialogueHistoryItem | null>(null);
+
+  function openHistory() {
+    const saved = JSON.parse(localStorage.getItem(`seq-dialogue-history-${studentId}`) || "[]") as DialogueHistoryItem[];
+    setHistoryItems(saved);
+    setSelectedHistory(null);
+    setHistoryOpen(true);
+  }
 
   function startScenario(scenario: DialogueScenario) {
     setActiveScenario(scenario);
@@ -2883,7 +2966,14 @@ function ScenarioDialogue({
     setError("");
     setListening(true);
     try {
-      const transcript = await listenToStudentSpeech();
+      if (!window.isSecureContext && location.hostname !== "localhost") {
+        throw new Error("語音輸入需要 HTTPS 安全連線。請使用正式網站並允許麥克風權限。");
+      }
+      if (navigator.mediaDevices?.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((track) => track.stop());
+      }
+      const transcript = await listenToStudentSpeech({ timeoutMs: 15000 });
       await sendStudentMessage(transcript);
     } catch (event) {
       setError(event instanceof Error ? event.message : "沒有成功聽到聲音。");
@@ -2920,7 +3010,10 @@ function ScenarioDialogue({
             <h3>AI 情境對話</h3>
             <p className="muted">選一個生活情境，和 AI 角色用英文聊天。可以打字，也可以用語音回答。</p>
           </div>
-          <span className="pill blue">獨立練習</span>
+          <div className="admin-actions">
+            <span className="pill blue">獨立練習</span>
+            <button className="btn secondary" type="button" onClick={openHistory}>聊天紀錄</button>
+          </div>
         </div>
         <div className="grid cards scenario-grid">
           {scenarios.map((scenario) => (
@@ -2934,6 +3027,14 @@ function ScenarioDialogue({
             </article>
           ))}
         </div>
+        {historyOpen && (
+          <DialogueHistoryLibrary
+            items={historyItems}
+            selected={selectedHistory}
+            onSelect={setSelectedHistory}
+            onClose={() => setHistoryOpen(false)}
+          />
+        )}
       </section>
     );
   }
@@ -3019,6 +3120,63 @@ function ScenarioDialogue({
         </div>
       )}
     </section>
+  );
+}
+
+function DialogueHistoryLibrary({
+  items,
+  selected,
+  onSelect,
+  onClose
+}: {
+  items: DialogueHistoryItem[];
+  selected: DialogueHistoryItem | null;
+  onSelect: (item: DialogueHistoryItem | null) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="dialogue-history-backdrop" role="dialog" aria-modal="true" aria-label="情境對話聊天紀錄">
+      <section className="dialogue-history-page">
+        <header>
+          <div>
+            <p className="eyebrow">Conversation Archive</p>
+            <h3>{selected ? selected.title : "我的聊天紀錄"}</h3>
+            <p className="muted">{selected ? "此頁只能閱讀，不能繼續聊天。" : "點擊一次練習，查看當時與 AI 的完整對話。"}</p>
+          </div>
+          <div className="admin-actions">
+            {selected && <button className="btn secondary" type="button" onClick={() => onSelect(null)}>返回紀錄列表</button>}
+            <button className="btn ghost" type="button" onClick={onClose}>收起紀錄</button>
+          </div>
+        </header>
+        {selected ? (
+          <div className="dialogue-history-thread">
+            {selected.messages.map((message, index) => (
+              <article className={`dialogue-message ${message.role}`} key={`${selected.id}-${message.role}-${index}`}>
+                <span>{message.role === "ai" ? "🦉" : "🧒"}</span>
+                <p>{message.text}</p>
+              </article>
+            ))}
+          </div>
+        ) : items.length ? (
+          <div className="dialogue-history-grid">
+            {items.map((item) => (
+              <button type="button" key={item.id} onClick={() => onSelect(item)}>
+                <span>💬</span>
+                <strong>{item.title}</strong>
+                <small>{new Date(item.date).toLocaleString("zh-Hant")}</small>
+                <em>{item.messages.length} 則訊息</em>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-state">
+            <span>📭</span>
+            <h3>還沒有聊天紀錄</h3>
+            <p>完成對話並在退出時選擇「保存並退出」，紀錄就會出現在這裡。</p>
+          </div>
+        )}
+      </section>
+    </div>
   );
 }
 

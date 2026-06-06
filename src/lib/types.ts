@@ -67,6 +67,7 @@ export type Lesson = {
 export type StudentProgress = {
   stars: number;
   streak: number;
+  bossCrowns?: Partial<Record<Skill, number>>;
   lastCheckInDate?: string;
   attendanceDates?: string[];
   completedLessons: string[];

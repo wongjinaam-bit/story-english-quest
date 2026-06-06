@@ -7,6 +7,7 @@ function emptyProgress(): StudentProgress {
   return {
     stars: 0,
     streak: 0,
+    bossCrowns: {},
     lastCheckInDate: "",
     attendanceDates: [],
     completedLessons: [],
