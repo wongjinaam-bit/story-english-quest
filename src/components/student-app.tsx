@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Headphones, LogOut, Mic, QrCode, Sparkles, Star, UserRound } from "lucide-react";
+import { bossTravelLesson } from "@/data/boss-travel";
 import { appLessons } from "@/data/lessons";
 import { isSupabaseReady, signInStudent, signOut, signUpStudent } from "@/lib/auth";
 import { mergePublishedLessons } from "@/lib/course-drafts";
@@ -19,7 +20,7 @@ import {
 } from "@/lib/progress";
 import type { AppAssignment, ChoiceQuestion, CourseDraft, LearningLevel, Lesson, Skill, SpeakingTask, StudentProgress, StudentSession, Word, WritingTask } from "@/lib/types";
 
-type Screen = "home" | "map" | "story" | "questVocab" | "vocab" | "listen" | "speak" | "read" | "write" | "dialogue" | "review" | "progress";
+type Screen = "home" | "map" | "boss" | "story" | "questVocab" | "vocab" | "listen" | "speak" | "read" | "write" | "dialogue" | "review" | "progress";
 
 type QuizTaskState = {
   index: number;
@@ -262,6 +263,19 @@ const dialogueScenarios: DialogueScenario[] = [
     goal: "練習提問、描述展品、表達看法。",
     sampleReplies: ["This painting is very old.", "What do you notice about it?", "Please do not touch the exhibit."],
     setting: "A museum tour. The student asks about exhibits, describes what they see, and shares opinions."
+  },
+  {
+    id: "boss-sustainable-travel",
+    title: "永續旅行規劃會議",
+    topic: "Boss Challenge",
+    cover: "🌍",
+    role: "Sustainable travel advisor",
+    voice: "female",
+    level: "advanced",
+    opening: "Welcome, travel planner. Please tell me where you want to go and how you will make your trip responsible.",
+    goal: "向旅遊顧問說明目的地、交通、住宿與保護當地環境的方法，並回答追問。",
+    sampleReplies: ["How will you travel there?", "How will your plan help local people?", "What will you do to reduce waste?"],
+    setting: "A final travel-planning meeting. The student must create and defend a smart, flexible, and sustainable travel plan."
   }
 ];
 
@@ -326,6 +340,7 @@ export function StudentApp() {
   const [mapWorldLevel, setMapWorldLevel] = useState<1 | 2 | 3>(1);
   const [pendingNavigation, setPendingNavigation] = useState<Screen | null>(null);
   const [pendingReplayLesson, setPendingReplayLesson] = useState<Lesson | null>(null);
+  const [bossGate, setBossGate] = useState<Skill | null>(null);
   const [activeScenario, setActiveScenario] = useState<DialogueScenario | null>(null);
   const [dialogueMessages, setDialogueMessages] = useState<DialogueMessage[]>([]);
   const [dialogueExitOpen, setDialogueExitOpen] = useState(false);
@@ -592,6 +607,30 @@ export function StudentApp() {
     completeMatchingAssignments(lesson.id, skill, nextSkills.size >= 4);
   }
 
+  function completeBossSkill(skill: Skill) {
+    mutateProgress((draft) => recordSkill(draft, bossTravelLesson.id, skill));
+    setBossGate(null);
+  }
+
+  function answerBossQuestion(question: ChoiceQuestion, answer: string) {
+    const correct = answer === question.answer;
+    mutateProgress((draft) => recordAnswer(draft, bossTravelLesson.id, question.skill, question.prompt, correct, answer, question.answer));
+    return correct;
+  }
+
+  function answerBossPractice(skill: Skill, label: string, correct: boolean, answer: string, correctAnswer: string) {
+    mutateProgress((draft) => recordAnswer(draft, bossTravelLesson.id, skill, label, correct, answer, correctAnswer));
+  }
+
+  function startBossDialogue() {
+    const scenario = dialogueScenarios.find((item) => item.id === "boss-sustainable-travel");
+    if (!scenario) return;
+    setActiveScenario(scenario);
+    setDialogueMessages([{ role: "ai", text: scenario.opening }]);
+    setScreen("dialogue");
+    window.setTimeout(() => speak(scenario.opening, 0.88, scenario.voice), 120);
+  }
+
   function answerQuestion(question: ChoiceQuestion, answer: string) {
     const correct = answer === question.answer;
     mutateProgress((draft) => recordAnswer(draft, lesson.id, question.skill, question.prompt, correct, answer, question.answer));
@@ -614,28 +653,28 @@ export function StudentApp() {
     return `${targetLessonId}:${skill}`;
   }
 
-  function quizStateFor(skill: Skill): QuizTaskState {
-    return quizTaskStates[taskStateKey(skill)] || { index: 0, feedback: "", picked: "" };
+  function quizStateFor(skill: Skill, targetLessonId = lesson.id): QuizTaskState {
+    return quizTaskStates[taskStateKey(skill, targetLessonId)] || { index: 0, feedback: "", picked: "" };
   }
 
-  function updateQuizState(skill: Skill, nextState: QuizTaskState) {
-    setQuizTaskStates((current) => ({ ...current, [taskStateKey(skill)]: nextState }));
+  function updateQuizState(skill: Skill, nextState: QuizTaskState, targetLessonId = lesson.id) {
+    setQuizTaskStates((current) => ({ ...current, [taskStateKey(skill, targetLessonId)]: nextState }));
   }
 
-  function speakStateFor(): SpeakTaskState {
-    return speakTaskStates[taskStateKey("speak")] || { done: {}, heard: {}, tries: {} };
+  function speakStateFor(targetLessonId = lesson.id): SpeakTaskState {
+    return speakTaskStates[taskStateKey("speak", targetLessonId)] || { done: {}, heard: {}, tries: {} };
   }
 
-  function updateSpeakState(nextState: SpeakTaskState) {
-    setSpeakTaskStates((current) => ({ ...current, [taskStateKey("speak")]: nextState }));
+  function updateSpeakState(nextState: SpeakTaskState, targetLessonId = lesson.id) {
+    setSpeakTaskStates((current) => ({ ...current, [taskStateKey("speak", targetLessonId)]: nextState }));
   }
 
-  function writeStateFor(): WriteTaskState {
-    return writeTaskStates[taskStateKey("write")] || { index: 0, answers: {}, checked: {}, aiTips: {} };
+  function writeStateFor(targetLessonId = lesson.id): WriteTaskState {
+    return writeTaskStates[taskStateKey("write", targetLessonId)] || { index: 0, answers: {}, checked: {}, aiTips: {} };
   }
 
-  function updateWriteState(nextState: WriteTaskState) {
-    setWriteTaskStates((current) => ({ ...current, [taskStateKey("write")]: nextState }));
+  function updateWriteState(nextState: WriteTaskState, targetLessonId = lesson.id) {
+    setWriteTaskStates((current) => ({ ...current, [taskStateKey("write", targetLessonId)]: nextState }));
   }
 
   function hasUsedHelp(skill: Skill) {
@@ -981,6 +1020,17 @@ export function StudentApp() {
               })}
             </div>
 
+            <button className="boss-world-entry" type="button" onClick={() => setScreen("boss")}>
+              <span className="boss-entry-orbit" aria-hidden="true">✦</span>
+              <div className="boss-entry-icon">🌍</div>
+              <div>
+                <p className="eyebrow">Special World · B1</p>
+                <h3>Boss 挑戰賽：The Evolution of Modern Travel</h3>
+                <p>四個大型關卡考驗聽、說、讀、寫，最後和 AI 旅遊顧問完成永續旅行提案。</p>
+              </div>
+              <strong>進入 Boss 世界</strong>
+            </button>
+
             {courseWorlds.filter((world) => world.level === mapWorldLevel).map((world) => {
               const worldLessons = lessons.filter((item) => item.level === world.level);
               if (!worldLessons.length) return null;
@@ -1043,6 +1093,26 @@ export function StudentApp() {
               );
             })}
           </section>
+        )}
+
+        {screen === "boss" && (
+          <BossTravelChallenge
+            studentId={student.id}
+            activeGate={bossGate}
+            setActiveGate={setBossGate}
+            completedSkills={progress.completedSkills[bossTravelLesson.id] || []}
+            quizStateFor={(skill) => quizStateFor(skill, bossTravelLesson.id)}
+            updateQuizState={(skill, state) => updateQuizState(skill, state, bossTravelLesson.id)}
+            speakState={speakStateFor(bossTravelLesson.id)}
+            updateSpeakState={(state) => updateSpeakState(state, bossTravelLesson.id)}
+            writeState={writeStateFor(bossTravelLesson.id)}
+            updateWriteState={(state) => updateWriteState(state, bossTravelLesson.id)}
+            speak={speak}
+            answerQuestion={answerBossQuestion}
+            answerPractice={answerBossPractice}
+            completeSkill={completeBossSkill}
+            startBossDialogue={startBossDialogue}
+          />
         )}
 
         {screen === "story" && <Story lesson={lesson} showZh={showZh} setShowZh={setShowZh} speed={speed} setSpeed={setSpeed} speak={speak} next={() => setScreen(nextWithoutRegressing(lesson.id, "questVocab"))} />}
@@ -1182,6 +1252,232 @@ function ReplayLessonPrompt({ lesson, onCancel, onReplay }: {
           <button className="btn secondary adventure-btn" type="button" onClick={onReplay}>重新挑戰</button>
         </div>
       </article>
+    </div>
+  );
+}
+
+function BossTravelChallenge({
+  studentId,
+  activeGate,
+  setActiveGate,
+  completedSkills,
+  quizStateFor,
+  updateQuizState,
+  speakState,
+  updateSpeakState,
+  writeState,
+  updateWriteState,
+  speak,
+  answerQuestion,
+  answerPractice,
+  completeSkill,
+  startBossDialogue
+}: {
+  studentId: string;
+  activeGate: Skill | null;
+  setActiveGate: (skill: Skill | null) => void;
+  completedSkills: Skill[];
+  quizStateFor: (skill: Skill) => QuizTaskState;
+  updateQuizState: (skill: Skill, state: QuizTaskState) => void;
+  speakState: SpeakTaskState;
+  updateSpeakState: (state: SpeakTaskState) => void;
+  writeState: WriteTaskState;
+  updateWriteState: (state: WriteTaskState) => void;
+  speak: (text: string, rate?: number, voiceHint?: "male" | "female") => void;
+  answerQuestion: (question: ChoiceQuestion, answer: string) => boolean;
+  answerPractice: (skill: Skill, label: string, correct: boolean, answer: string, correctAnswer: string) => void;
+  completeSkill: (skill: Skill) => void;
+  startBossDialogue: () => void;
+}) {
+  const [gateStarted, setGateStarted] = useState(false);
+  const [showCg, setShowCg] = useState(true);
+  const seenKey = `seq-boss-travel-cg-seen-${studentId}`;
+  const allComplete = (["listen", "speak", "read", "write"] as Skill[]).every((skill) => completedSkills.includes(skill));
+  const gateMeta: Record<Skill, { icon: string; title: string; subtitle: string; count: number }> = {
+    listen: { icon: "🎧", title: "Listening Expedition", subtitle: "從關鍵字聽辨到主旨判斷", count: bossTravelLesson.listen.length },
+    speak: { icon: "🎙️", title: "Speaking Summit", subtitle: "從清楚咬字到完整表達觀點", count: bossTravelLesson.speak.length },
+    read: { icon: "📖", title: "Reading Labyrinth", subtitle: "從資訊搜尋到推論與主旨", count: bossTravelLesson.read.length },
+    write: { icon: "✍️", title: "Writing Command", subtitle: "從句子完成到旅行承諾", count: bossTravelLesson.write.length }
+  };
+
+  useEffect(() => {
+    setGateStarted(false);
+  }, [activeGate]);
+
+  function showAnswer(answer: string) {
+    window.alert(`Owl Boss Hint\n正確答案：${answer}`);
+  }
+
+  if (activeGate && !gateStarted) {
+    return (
+      <section className="boss-challenge-page">
+        {showCg && <BossCgOverlay seenKey={seenKey} onClose={() => setShowCg(false)} />}
+        <button className="btn ghost boss-back" type="button" onClick={() => setActiveGate(null)}>← 返回 Boss 大廳</button>
+        <article className="boss-article-panel">
+          <div className="boss-article-heading">
+            <span>{gateMeta[activeGate].icon}</span>
+            <div>
+              <p className="eyebrow">關卡第一頁 · 先閱讀任務文章</p>
+              <h3>{bossTravelLesson.title}</h3>
+              <p>{gateMeta[activeGate].title} · {gateMeta[activeGate].subtitle}</p>
+            </div>
+          </div>
+          <div className="boss-article-body">
+            {bossTravelLesson.sentences.map((paragraph, index) => (
+              <div className="boss-paragraph" key={paragraph.en}>
+                <span>{index + 1}</span>
+                <div>
+                  <p>{paragraph.en}</p>
+                  <small>{paragraph.zh}</small>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="boss-article-actions">
+            <button className="btn secondary" type="button" onClick={() => speak(bossTravelLesson.sentences.map((item) => item.en).join(" "), 0.82)}>
+              <Headphones size={18} /> 聆聽全文
+            </button>
+            <button className="btn primary" type="button" onClick={() => setGateStarted(true)}>
+              開始 {gateMeta[activeGate].title}
+            </button>
+          </div>
+        </article>
+      </section>
+    );
+  }
+
+  if (activeGate === "listen") {
+    return (
+      <section className="boss-challenge-page">
+        <button className="btn ghost boss-back" type="button" onClick={() => setActiveGate(null)}>← 返回 Boss 大廳</button>
+        <BossStageHeader skill="listen" current={quizStateFor("listen").index} total={bossTravelLesson.listen.length} />
+        <QuizTask lesson={bossTravelLesson} skill="listen" questions={bossTravelLesson.listen} speak={speak} state={quizStateFor("listen")} onStateChange={(state) => updateQuizState("listen", state)} sectionCompleted={completedSkills.includes("listen")} helpUsed={false} onHelp={(question) => showAnswer(question.answer)} onAnswer={answerQuestion} onPrevSection={() => setGateStarted(false)} onDone={() => completeSkill("listen")} />
+      </section>
+    );
+  }
+
+  if (activeGate === "read") {
+    return (
+      <section className="boss-challenge-page">
+        <button className="btn ghost boss-back" type="button" onClick={() => setActiveGate(null)}>← 返回 Boss 大廳</button>
+        <BossStageHeader skill="read" current={quizStateFor("read").index} total={bossTravelLesson.read.length} />
+        <QuizTask lesson={bossTravelLesson} skill="read" questions={bossTravelLesson.read} speak={speak} state={quizStateFor("read")} onStateChange={(state) => updateQuizState("read", state)} sectionCompleted={completedSkills.includes("read")} helpUsed={false} onHelp={(question) => showAnswer(question.answer)} onAnswer={answerQuestion} onPrevSection={() => setGateStarted(false)} onDone={() => completeSkill("read")} />
+      </section>
+    );
+  }
+
+  if (activeGate === "speak") {
+    return (
+      <section className="boss-challenge-page">
+        <button className="btn ghost boss-back" type="button" onClick={() => setActiveGate(null)}>← 返回 Boss 大廳</button>
+        <BossStageHeader skill="speak" current={speakState.index || 0} total={bossTravelLesson.speak.length} />
+        <SpeakTask lesson={bossTravelLesson} speak={speak} state={speakState} onStateChange={updateSpeakState} sectionCompleted={completedSkills.includes("speak")} helpUsed={false} onHelp={showAnswer} onAnswer={answerPractice} onPrevSection={() => setGateStarted(false)} onDone={() => completeSkill("speak")} />
+      </section>
+    );
+  }
+
+  if (activeGate === "write") {
+    return (
+      <section className="boss-challenge-page">
+        <button className="btn ghost boss-back" type="button" onClick={() => setActiveGate(null)}>← 返回 Boss 大廳</button>
+        <BossStageHeader skill="write" current={writeState.index} total={bossTravelLesson.write.length} />
+        <WriteTask lesson={bossTravelLesson} state={writeState} onStateChange={updateWriteState} sectionCompleted={completedSkills.includes("write")} helpUsed={false} onHelp={showAnswer} onAnswer={answerPractice} onPrevSection={() => setGateStarted(false)} onDone={() => completeSkill("write")} />
+      </section>
+    );
+  }
+
+  return (
+    <section className="boss-hub">
+      {showCg && <BossCgOverlay seenKey={seenKey} onClose={() => setShowCg(false)} />}
+      <div className="boss-hero">
+        <div>
+          <p className="eyebrow">B1 Special World · Grade 6</p>
+          <h3>The Evolution of Modern Travel</h3>
+          <p>完成四個能力關卡，證明你能理解現代旅行，也能做出負責任的旅行選擇。</p>
+          <div className="boss-progress-line">
+            <span style={{ width: `${(completedSkills.length / 4) * 100}%` }} />
+          </div>
+          <strong>{completedSkills.length}/4 核心關卡完成</strong>
+        </div>
+        <div className="boss-globe">🌍</div>
+        <button className="btn secondary" type="button" onClick={() => setShowCg(true)}>重播 CG</button>
+      </div>
+      <div className="boss-gate-grid">
+        {(["listen", "speak", "read", "write"] as Skill[]).map((skill, index) => {
+          const meta = gateMeta[skill];
+          const complete = completedSkills.includes(skill);
+          return (
+            <button className={`boss-gate ${complete ? "complete" : ""}`} type="button" key={skill} onClick={() => setActiveGate(skill)}>
+              <span className="boss-gate-number">0{index + 1}</span>
+              <span className="boss-gate-icon">{complete ? "👑" : meta.icon}</span>
+              <strong>{meta.title}</strong>
+              <small>{meta.subtitle}</small>
+              <em>{meta.count} 個小關卡 · {complete ? "已通過" : "進入挑戰"}</em>
+            </button>
+          );
+        })}
+      </div>
+      <article className={`boss-ai-final ${allComplete ? "unlocked" : ""}`}>
+        <div className="boss-ai-symbol">🤖</div>
+        <div>
+          <p className="eyebrow">Final Boss · AI Simulation</p>
+          <h3>永續旅行規劃會議</h3>
+          <p>{allComplete ? "和 AI 旅遊顧問進行真正的英文對話，提出並解釋你的永續旅行方案。" : "完成聽、說、讀、寫四關後解鎖。"}</p>
+        </div>
+        <button className="btn primary" type="button" disabled={!allComplete} onClick={startBossDialogue}>開始最終對話</button>
+      </article>
+    </section>
+  );
+}
+
+function BossStageHeader({ skill, current, total }: { skill: Skill; current: number; total: number }) {
+  const stage = current < Math.ceil(total * .25) ? "暖身" : current < Math.ceil(total * .55) ? "理解" : current < Math.ceil(total * .8) ? "應用" : "Boss 題";
+  return (
+    <div className="boss-stage-header">
+      <span>{stage}</span>
+      <div>
+        <strong>{skillLabels[skill]}能力挑戰</strong>
+        <small>小關卡 {Math.min(current + 1, total)} / {total}</small>
+      </div>
+    </div>
+  );
+}
+
+function BossCgOverlay({ seenKey, onClose }: { seenKey: string; onClose: () => void }) {
+  const [seenBefore] = useState(() => typeof window !== "undefined" && localStorage.getItem(seenKey) === "yes");
+  const [playing, setPlaying] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    if (!seenBefore) return;
+    const skip = () => onClose();
+    window.addEventListener("keydown", skip);
+    return () => window.removeEventListener("keydown", skip);
+  }, [onClose, seenBefore]);
+
+  function finish() {
+    localStorage.setItem(seenKey, "yes");
+    onClose();
+  }
+
+  return (
+    <div className={`boss-cg-backdrop ${seenBefore ? "skippable" : ""}`} onClick={() => seenBefore && onClose()}>
+      <div className="boss-cg-frame" onClick={(event) => event.stopPropagation()}>
+        <video ref={videoRef} autoPlay muted playsInline onPlay={() => setPlaying(true)} onEnded={finish} src="/boss-travel-intro.mp4" />
+        {!playing && (
+          <button className="boss-cg-play" type="button" onClick={() => videoRef.current?.play()}>
+            <span>▶</span>
+            播放 Boss 挑戰序章
+          </button>
+        )}
+        <div className="boss-cg-caption">
+          <div>
+            <p className="eyebrow">Boss Challenge Incoming</p>
+            <strong>{playing ? "The Evolution of Modern Travel" : "正在載入 Boss CG..."}</strong>
+          </div>
+          <span>{seenBefore ? "按任意鍵或點擊外側跳過" : "首次進入需完整觀看"}</span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1589,6 +1885,7 @@ function titleFor(screen: Screen) {
   const titles: Record<Screen, string> = {
     home: "今日故事任務",
     map: "課程地圖",
+    boss: "Boss 挑戰賽",
     story: "故事頁",
     questVocab: "故事單字任務",
     vocab: "單字學習",

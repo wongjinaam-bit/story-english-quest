@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { bossTravelLesson } from "@/data/boss-travel";
 import { appLessons } from "@/data/lessons";
 import { isSupabaseReady, signInStaff, signOut } from "@/lib/auth";
 import { mergePublishedLessons } from "@/lib/course-drafts";
@@ -40,8 +41,11 @@ const dialogueAssignmentOptions = [
   { id: "library-help", title: "圖書館借書", topic: "Reading", level: "beginner" as LearningLevel, cover: "📚" },
   { id: "shopping-clothes", title: "買衣服", topic: "Shopping", level: "intermediate" as LearningLevel, cover: "👕" },
   { id: "bus-station", title: "巴士站問路", topic: "City", level: "beginner" as LearningLevel, cover: "🚌" },
-  { id: "museum-tour", title: "博物館導覽", topic: "Culture", level: "advanced" as LearningLevel, cover: "🏛️" }
+  { id: "museum-tour", title: "博物館導覽", topic: "Culture", level: "advanced" as LearningLevel, cover: "🏛️" },
+  { id: "boss-sustainable-travel", title: "Boss：永續旅行規劃會議", topic: "Boss Challenge", level: "advanced" as LearningLevel, cover: "🌍" }
 ];
+
+const teacherReportBaseLessons = [...appLessons, bossTravelLesson];
 
 function assignmentKindLabel(kind: AssignmentKind) {
   if (kind === "all") return "全部任務";
@@ -344,18 +348,18 @@ function Students({
   onSelectStudent: (id: string | null) => void;
   onStudentLevelChanged: (studentId: string, level: LearningLevel) => void;
 }) {
-  const [teacherReportLessons, setTeacherReportLessons] = useState<Lesson[]>(appLessons);
+  const [teacherReportLessons, setTeacherReportLessons] = useState<Lesson[]>(teacherReportBaseLessons);
   const [studentLevelOverrides, setStudentLevelOverrides] = useState<Record<string, LearningLevel>>({});
 
   useEffect(() => {
     async function loadTeacherReportLessons() {
       if (!supabaseReady || !supabase) {
-        setTeacherReportLessons(appLessons);
+        setTeacherReportLessons(teacherReportBaseLessons);
         return;
       }
       const { data, error } = await supabase.from("course_drafts").select("*").eq("status", "published");
       if (error) return;
-      setTeacherReportLessons(mergePublishedLessons(appLessons, (data || []) as CourseDraft[]));
+      setTeacherReportLessons(mergePublishedLessons(teacherReportBaseLessons, (data || []) as CourseDraft[]));
     }
     loadTeacherReportLessons();
   }, [supabaseReady]);

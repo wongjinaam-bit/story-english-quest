@@ -2450,6 +2450,469 @@ button.pill {
 .pixabay-result small {
   color: var(--muted);
 }
+
+.boss-world-entry {
+  align-items: center;
+  background:
+    radial-gradient(circle at 12% 25%, rgba(255, 217, 109, .45), transparent 18%),
+    radial-gradient(circle at 88% 30%, rgba(124, 226, 255, .3), transparent 24%),
+    linear-gradient(135deg, #151d43, #39295f 58%, #174f64);
+  border: 1px solid rgba(255,255,255,.26);
+  border-radius: 28px;
+  box-shadow: 0 22px 55px rgba(29, 36, 84, .26), inset 0 1px rgba(255,255,255,.32);
+  color: #fff;
+  cursor: pointer;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: auto 1fr auto;
+  margin: 18px 28px 28px;
+  overflow: hidden;
+  padding: 24px 28px;
+  position: relative;
+  text-align: left;
+  transition: transform .2s ease, box-shadow .2s ease;
+}
+
+.boss-world-entry::after {
+  background-image: radial-gradient(circle, rgba(255,255,255,.65) 1px, transparent 1.5px);
+  background-size: 28px 28px;
+  content: "";
+  inset: 0;
+  opacity: .28;
+  pointer-events: none;
+  position: absolute;
+}
+
+.boss-world-entry:hover {
+  box-shadow: 0 28px 65px rgba(29, 36, 84, .34), inset 0 1px rgba(255,255,255,.38);
+  transform: translateY(-3px);
+}
+
+.boss-world-entry > * {
+  position: relative;
+  z-index: 1;
+}
+
+.boss-world-entry .eyebrow {
+  color: #ffe692;
+}
+
+.boss-world-entry h3 {
+  color: #fff;
+  font-size: 25px;
+  margin: 4px 0 7px;
+}
+
+.boss-world-entry p {
+  color: rgba(255,255,255,.78);
+  margin: 0;
+}
+
+.boss-world-entry > strong {
+  background: linear-gradient(135deg, #ffe595, #ffbd67);
+  border-radius: 18px;
+  color: #342345;
+  padding: 14px 18px;
+}
+
+.boss-entry-icon {
+  background: rgba(255,255,255,.14);
+  border: 1px solid rgba(255,255,255,.28);
+  border-radius: 22px;
+  display: grid;
+  font-size: 48px;
+  height: 82px;
+  place-items: center;
+  width: 82px;
+}
+
+.boss-entry-orbit {
+  animation: bossFloat 2.5s ease-in-out infinite;
+  color: #ffe692;
+  font-size: 30px;
+  position: absolute;
+  right: 20%;
+  top: 12px;
+}
+
+.boss-hub,
+.boss-challenge-page {
+  background:
+    radial-gradient(circle at 15% 5%, rgba(255, 220, 128, .34), transparent 18%),
+    radial-gradient(circle at 88% 10%, rgba(128, 228, 255, .28), transparent 22%),
+    linear-gradient(155deg, #f7f4ff, #edf7ff 52%, #fff8e8);
+  border: 1px solid rgba(132, 157, 219, .28);
+  border-radius: 32px;
+  box-shadow: 0 24px 65px rgba(47, 69, 122, .14);
+  min-height: 70vh;
+  overflow: hidden;
+  padding: 28px;
+  position: relative;
+}
+
+.boss-hub::before,
+.boss-challenge-page::before {
+  color: rgba(76, 101, 176, .06);
+  content: "TRAVEL · PLAN · PROTECT · EXPLORE";
+  font-size: 54px;
+  font-weight: 1000;
+  left: 10px;
+  letter-spacing: .18em;
+  pointer-events: none;
+  position: absolute;
+  top: 20px;
+  transform: rotate(-5deg);
+}
+
+.boss-hub > *,
+.boss-challenge-page > * {
+  position: relative;
+  z-index: 1;
+}
+
+.boss-hero {
+  align-items: center;
+  background: linear-gradient(135deg, rgba(24, 34, 78, .96), rgba(53, 45, 103, .93), rgba(21, 94, 107, .91));
+  border: 1px solid rgba(255,255,255,.25);
+  border-radius: 28px;
+  box-shadow: 0 22px 55px rgba(35, 45, 93, .24);
+  color: #fff;
+  display: grid;
+  gap: 22px;
+  grid-template-columns: 1fr auto auto;
+  padding: 28px;
+}
+
+.boss-hero h3 {
+  color: #fff;
+  font-size: clamp(30px, 4vw, 48px);
+  margin: 6px 0 10px;
+}
+
+.boss-hero p {
+  color: rgba(255,255,255,.78);
+}
+
+.boss-hero .eyebrow {
+  color: #ffe38a;
+}
+
+.boss-globe {
+  animation: bossFloat 3s ease-in-out infinite;
+  filter: drop-shadow(0 16px 20px rgba(0,0,0,.25));
+  font-size: 92px;
+}
+
+.boss-progress-line {
+  background: rgba(255,255,255,.15);
+  border-radius: 999px;
+  height: 10px;
+  margin: 18px 0 8px;
+  overflow: hidden;
+}
+
+.boss-progress-line span {
+  background: linear-gradient(90deg, #ffe177, #58dbb1);
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+  transition: width .35s ease;
+}
+
+.boss-gate-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 22px;
+}
+
+.boss-gate {
+  background: rgba(255,255,255,.88);
+  border: 1px solid rgba(122, 153, 218, .32);
+  border-radius: 26px;
+  box-shadow: 0 16px 38px rgba(54, 80, 139, .12);
+  cursor: pointer;
+  display: grid;
+  gap: 10px;
+  min-height: 245px;
+  padding: 20px;
+  position: relative;
+  text-align: left;
+  transition: transform .2s ease, box-shadow .2s ease;
+}
+
+.boss-gate:hover {
+  box-shadow: 0 24px 48px rgba(54, 80, 139, .2);
+  transform: translateY(-5px);
+}
+
+.boss-gate.complete {
+  background: linear-gradient(145deg, rgba(231,255,245,.96), rgba(255,255,255,.94));
+  border-color: rgba(67, 201, 151, .48);
+}
+
+.boss-gate-number {
+  color: #7180ab;
+  font-size: 13px;
+  font-weight: 1000;
+  letter-spacing: .18em;
+}
+
+.boss-gate-icon {
+  font-size: 48px;
+}
+
+.boss-gate strong {
+  color: var(--ink);
+  font-size: 21px;
+}
+
+.boss-gate small {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.boss-gate em {
+  align-self: end;
+  color: #3567d8;
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.boss-ai-final {
+  align-items: center;
+  background: rgba(255,255,255,.65);
+  border: 1px dashed rgba(108, 125, 182, .4);
+  border-radius: 26px;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: auto 1fr auto;
+  margin-top: 22px;
+  opacity: .62;
+  padding: 22px;
+}
+
+.boss-ai-final.unlocked {
+  background: linear-gradient(135deg, rgba(255,244,198,.96), rgba(229,248,255,.96));
+  border-style: solid;
+  opacity: 1;
+}
+
+.boss-ai-final h3 {
+  margin: 4px 0 7px;
+}
+
+.boss-ai-final p {
+  color: var(--muted);
+  margin: 0;
+}
+
+.boss-ai-symbol {
+  background: #fff;
+  border-radius: 20px;
+  box-shadow: 0 10px 25px rgba(50, 76, 133, .13);
+  display: grid;
+  font-size: 40px;
+  height: 72px;
+  place-items: center;
+  width: 72px;
+}
+
+.boss-back {
+  margin-bottom: 18px;
+}
+
+.boss-article-panel {
+  background: rgba(255,255,255,.94);
+  border: 1px solid rgba(124, 153, 216, .3);
+  border-radius: 28px;
+  box-shadow: 0 20px 50px rgba(45, 73, 133, .12);
+  padding: 26px;
+}
+
+.boss-article-heading {
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  gap: 18px;
+  padding-bottom: 20px;
+}
+
+.boss-article-heading > span {
+  background: linear-gradient(135deg, #fff2bd, #e9f6ff);
+  border-radius: 22px;
+  display: grid;
+  font-size: 44px;
+  height: 82px;
+  place-items: center;
+  width: 82px;
+}
+
+.boss-article-heading h3 {
+  font-size: 30px;
+  margin: 4px 0 6px;
+}
+
+.boss-article-body {
+  display: grid;
+  gap: 14px;
+  margin: 22px 0;
+}
+
+.boss-paragraph {
+  background: #f8fbff;
+  border: 1px solid rgba(130, 161, 220, .23);
+  border-radius: 18px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: auto 1fr;
+  padding: 16px;
+}
+
+.boss-paragraph > span {
+  background: #e8efff;
+  border-radius: 12px;
+  color: #315dcc;
+  display: grid;
+  font-weight: 1000;
+  height: 34px;
+  place-items: center;
+  width: 34px;
+}
+
+.boss-paragraph p {
+  color: var(--ink);
+  font-size: 17px;
+  font-weight: 750;
+  line-height: 1.7;
+  margin: 0 0 5px;
+}
+
+.boss-paragraph small {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.boss-article-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.boss-stage-header {
+  align-items: center;
+  background: linear-gradient(135deg, #182249, #3b2d65);
+  border-radius: 22px;
+  color: #fff;
+  display: flex;
+  gap: 14px;
+  margin-bottom: 16px;
+  padding: 16px 20px;
+}
+
+.boss-stage-header > span {
+  background: #ffe18a;
+  border-radius: 999px;
+  color: #362849;
+  font-weight: 1000;
+  padding: 8px 14px;
+}
+
+.boss-stage-header div {
+  display: grid;
+  gap: 3px;
+}
+
+.boss-stage-header small {
+  color: rgba(255,255,255,.72);
+}
+
+.boss-cg-backdrop {
+  background: #050817;
+  display: grid;
+  inset: 0;
+  padding: 24px;
+  place-items: center;
+  position: fixed;
+  z-index: 1000;
+}
+
+.boss-cg-backdrop.skippable {
+  cursor: pointer;
+}
+
+.boss-cg-frame {
+  background: #0b1026;
+  border: 1px solid rgba(255,255,255,.22);
+  border-radius: 28px;
+  box-shadow: 0 30px 100px rgba(0,0,0,.55);
+  max-width: 1100px;
+  overflow: hidden;
+  position: relative;
+  width: min(100%, 1100px);
+}
+
+.boss-cg-frame video {
+  background: #060918;
+  display: block;
+  max-height: 78vh;
+  object-fit: contain;
+  width: 100%;
+}
+
+.boss-cg-play {
+  align-items: center;
+  background: linear-gradient(135deg, #ffe28c, #ffbd66);
+  border: 0;
+  border-radius: 999px;
+  box-shadow: 0 16px 42px rgba(0,0,0,.36);
+  color: #302441;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  font-weight: 1000;
+  gap: 10px;
+  left: 50%;
+  padding: 14px 22px;
+  position: absolute;
+  top: 45%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+}
+
+.boss-cg-play span {
+  background: rgba(255,255,255,.72);
+  border-radius: 999px;
+  display: grid;
+  height: 32px;
+  place-items: center;
+  width: 32px;
+}
+
+.boss-cg-caption {
+  align-items: center;
+  background: linear-gradient(90deg, rgba(8,12,31,.98), rgba(25,32,70,.95));
+  color: #fff;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+  padding: 16px 20px;
+}
+
+.boss-cg-caption .eyebrow {
+  color: #ffe18a;
+}
+
+.boss-cg-caption span {
+  color: rgba(255,255,255,.7);
+  font-size: 13px;
+}
+
+@keyframes bossFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
 .demo-login {
   margin-top: 22px;
   padding-top: 18px;
@@ -2752,4 +3215,92 @@ button.pill {
     width: 100%;
   }
   .avatar-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (max-width: 1024px) {
+  .boss-world-entry,
+  .boss-hero,
+  .boss-ai-final {
+    grid-template-columns: auto 1fr;
+  }
+  .boss-world-entry > strong,
+  .boss-hero > .btn,
+  .boss-ai-final > .btn {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+    text-align: center;
+  }
+  .boss-gate-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .boss-world-entry {
+    grid-template-columns: 1fr;
+    margin: 14px;
+    padding: 20px;
+    text-align: center;
+  }
+  .boss-entry-icon {
+    justify-self: center;
+  }
+  .boss-entry-orbit {
+    right: 10%;
+  }
+  .boss-hub,
+  .boss-challenge-page {
+    border-radius: 22px;
+    min-height: auto;
+    padding: 16px;
+  }
+  .boss-hub::before,
+  .boss-challenge-page::before {
+    font-size: 32px;
+  }
+  .boss-hero,
+  .boss-ai-final {
+    grid-template-columns: 1fr;
+    padding: 20px;
+    text-align: center;
+  }
+  .boss-globe,
+  .boss-ai-symbol {
+    justify-self: center;
+  }
+  .boss-gate-grid {
+    grid-template-columns: 1fr;
+  }
+  .boss-gate {
+    min-height: 190px;
+  }
+  .boss-article-panel {
+    padding: 16px;
+  }
+  .boss-article-heading {
+    align-items: flex-start;
+  }
+  .boss-article-heading > span {
+    flex: 0 0 auto;
+    font-size: 32px;
+    height: 58px;
+    width: 58px;
+  }
+  .boss-article-heading h3 {
+    font-size: 23px;
+  }
+  .boss-article-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  .boss-cg-backdrop {
+    padding: 10px;
+  }
+  .boss-cg-frame {
+    border-radius: 18px;
+  }
+  .boss-cg-caption {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
