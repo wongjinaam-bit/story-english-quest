@@ -618,7 +618,6 @@ export function StudentApp() {
 
   function completeBossSkill(skill: Skill) {
     mutateProgress((draft) => {
-      recordSkill(draft, bossTravelLesson.id, skill);
       const latestAnswers = new Map<string, boolean>();
       draft.answers
         .filter((item) => item.lessonId === bossTravelLesson.id && item.skill === skill)
@@ -632,6 +631,11 @@ export function StudentApp() {
             : bossTravelLesson.write.length;
       const correctCount = Array.from(latestAnswers.values()).filter(Boolean).length;
       const accuracy = expectedCount ? correctCount / expectedCount : 0;
+      if (accuracy >= 0.8) {
+        recordSkill(draft, bossTravelLesson.id, skill);
+      } else {
+        draft.completedSkills[bossTravelLesson.id] = (draft.completedSkills[bossTravelLesson.id] || []).filter((item) => item !== skill);
+      }
       draft.bossCrowns = {
         ...(draft.bossCrowns || {}),
         [skill]: accuracy >= 1 ? 2 : accuracy >= 0.8 ? 1 : 0
@@ -703,6 +707,34 @@ export function StudentApp() {
 
   function updateWriteState(nextState: WriteTaskState, targetLessonId = lesson.id) {
     setWriteTaskStates((current) => ({ ...current, [taskStateKey("write", targetLessonId)]: nextState }));
+  }
+
+  function resetBossGate(skill: Skill) {
+    if (skill === "listen" || skill === "read") {
+      setQuizTaskStates((current) => {
+        const next = { ...current };
+        delete next[taskStateKey(skill, bossTravelLesson.id)];
+        return next;
+      });
+    }
+    if (skill === "speak") {
+      setSpeakTaskStates((current) => {
+        const next = { ...current };
+        delete next[taskStateKey("speak", bossTravelLesson.id)];
+        return next;
+      });
+    }
+    if (skill === "write") {
+      setWriteTaskStates((current) => {
+        const next = { ...current };
+        delete next[taskStateKey("write", bossTravelLesson.id)];
+        return next;
+      });
+    }
+    mutateProgress((draft) => {
+      draft.completedSkills[bossTravelLesson.id] = (draft.completedSkills[bossTravelLesson.id] || []).filter((item) => item !== skill);
+      draft.bossCrowns = { ...(draft.bossCrowns || {}), [skill]: 0 };
+    });
   }
 
   function hasUsedHelp(skill: Skill) {
@@ -1141,6 +1173,7 @@ export function StudentApp() {
             answerQuestion={answerBossQuestion}
             answerPractice={answerBossPractice}
             completeSkill={completeBossSkill}
+            resetGate={resetBossGate}
             startBossDialogue={startBossDialogue}
           />
         )}
@@ -1302,6 +1335,7 @@ function BossTravelChallenge({
   answerQuestion,
   answerPractice,
   completeSkill,
+  resetGate,
   startBossDialogue
 }: {
   studentId: string;
@@ -1319,10 +1353,12 @@ function BossTravelChallenge({
   answerQuestion: (question: ChoiceQuestion, answer: string) => boolean;
   answerPractice: (skill: Skill, label: string, correct: boolean, answer: string, correctAnswer: string) => void;
   completeSkill: (skill: Skill) => void;
+  resetGate: (skill: Skill) => void;
   startBossDialogue: () => void;
 }) {
   const [gateStarted, setGateStarted] = useState(false);
   const [showCg, setShowCg] = useState(true);
+  const [gateDecision, setGateDecision] = useState<{ mode: "enter" | "exit" | "complete"; skill: Skill } | null>(null);
   const seenKey = `seq-boss-travel-cg-seen-${studentId}`;
   const allComplete = (["listen", "speak", "read", "write"] as Skill[]).every((skill) => completedSkills.includes(skill));
   const crownTotal = Object.values(crowns).reduce((total, count) => total + (count || 0), 0);
@@ -1333,19 +1369,75 @@ function BossTravelChallenge({
     write: { icon: "✍️", title: "Writing Command", subtitle: "從句子完成到旅行承諾", count: bossTravelLesson.write.length }
   };
 
-  useEffect(() => {
-    setGateStarted(false);
-  }, [activeGate]);
-
   function showAnswer(answer: string) {
     window.alert(`Owl Boss Hint\n正確答案：${answer}`);
   }
 
+  function battleMetrics(skill: Skill) {
+    if (skill === "listen" || skill === "read") {
+      const answers = quizStateFor(skill).pickedById || {};
+      const questions = bossTravelLesson[skill];
+      const correct = questions.filter((question) => answers[question.id] === question.answer).length;
+      return { correct, wrong: Object.keys(answers).length - correct };
+    }
+    if (skill === "speak") {
+      const scores = Object.values(speakState.scores || {});
+      return { correct: scores.filter((score) => score >= 70).length, wrong: scores.filter((score) => score < 70).length };
+    }
+    const checked = Object.values(writeState.checked || {});
+    return { correct: checked.filter((answer) => answer.correct).length, wrong: checked.filter((answer) => !answer.correct).length };
+  }
+
+  function hasGateProgress(skill: Skill) {
+    const metrics = battleMetrics(skill);
+    return completedSkills.includes(skill) || metrics.correct + metrics.wrong > 0;
+  }
+
+  function enterGate(skill: Skill) {
+    if (hasGateProgress(skill)) setGateDecision({ mode: "enter", skill });
+    else {
+      setActiveGate(skill);
+      setGateStarted(false);
+    }
+  }
+
+  function restartGate(skill: Skill) {
+    resetGate(skill);
+    setActiveGate(skill);
+    setGateStarted(false);
+    setGateDecision(null);
+  }
+
+  function exitGate() {
+    setActiveGate(null);
+    setGateStarted(false);
+    setGateDecision(null);
+  }
+
+  const decisionOverlay = gateDecision ? (
+    <div className="boss-decision-backdrop" onClick={() => setGateDecision(null)}>
+      <article className="boss-decision-card" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+        <div className="boss-decision-icon">{gateDecision.mode === "complete" ? "👑" : gateDecision.mode === "exit" ? "🧭" : "⚔️"}</div>
+        <p className="eyebrow">{gateMeta[gateDecision.skill].title}</p>
+        <h3>{gateDecision.mode === "enter" ? "繼續上次的 Boss 戰？" : gateDecision.mode === "exit" ? "要暫時離開戰場嗎？" : "Boss 戰結算"}</h3>
+        <p>{gateDecision.mode === "complete" ? "達到 80% 正確率即可擊敗 Boss 並獲得皇冠。你也可以重新挑戰爭取全對。" : "保留進度可以從目前回合繼續；重新開始只會清除這一關。"}</p>
+        <div className="boss-decision-actions">
+          {gateDecision.mode === "enter" && <button className="btn primary" type="button" onClick={() => { setActiveGate(gateDecision.skill); setGateStarted(true); setGateDecision(null); }}>繼續戰鬥</button>}
+          {gateDecision.mode === "exit" && <button className="btn primary" type="button" onClick={exitGate}>保留進度並退出</button>}
+          {gateDecision.mode === "complete" && <button className="btn primary" type="button" onClick={() => { completeSkill(gateDecision.skill); setGateDecision(null); }}>保存戰績並返回</button>}
+          <button className="btn danger" type="button" onClick={() => restartGate(gateDecision.skill)}>重新開始本關</button>
+          <button className="btn ghost" type="button" onClick={() => setGateDecision(null)}>繼續查看戰場</button>
+        </div>
+      </article>
+    </div>
+  ) : null;
+
   if (activeGate && !gateStarted) {
     return (
       <section className="boss-challenge-page">
+        {decisionOverlay}
         {showCg && <BossCgOverlay seenKey={seenKey} onClose={() => setShowCg(false)} />}
-        <button className="btn ghost boss-back" type="button" onClick={() => setActiveGate(null)}>← 返回 Boss 大廳</button>
+        <button className="btn ghost boss-back" type="button" onClick={() => setGateDecision({ mode: "exit", skill: activeGate })}>← 返回 Boss 大廳</button>
         <article className="boss-article-panel">
           <div className="boss-article-heading">
             <span>{gateMeta[activeGate].icon}</span>
@@ -1382,9 +1474,10 @@ function BossTravelChallenge({
   if (activeGate === "listen") {
     return (
       <section className="boss-challenge-page">
-        <button className="btn ghost boss-back" type="button" onClick={() => setActiveGate(null)}>← 返回 Boss 大廳</button>
-        <BossStageHeader skill="listen" current={quizStateFor("listen").index} total={bossTravelLesson.listen.length} />
-        <QuizTask lesson={bossTravelLesson} skill="listen" questions={bossTravelLesson.listen} speak={speak} state={quizStateFor("listen")} onStateChange={(state) => updateQuizState("listen", state)} sectionCompleted={completedSkills.includes("listen")} helpUsed={false} onHelp={(question) => showAnswer(question.answer)} onAnswer={answerQuestion} onPrevSection={() => setGateStarted(false)} onDone={() => completeSkill("listen")} />
+        {decisionOverlay}
+        <button className="btn ghost boss-back" type="button" onClick={() => setGateDecision({ mode: "exit", skill: "listen" })}>← 返回 Boss 大廳</button>
+        <BossStageHeader skill="listen" current={quizStateFor("listen").index} total={bossTravelLesson.listen.length} {...battleMetrics("listen")} />
+        <div className="boss-battle-task"><QuizTask lesson={bossTravelLesson} skill="listen" questions={bossTravelLesson.listen} speak={speak} state={quizStateFor("listen")} onStateChange={(state) => updateQuizState("listen", state)} sectionCompleted={completedSkills.includes("listen")} helpUsed={false} onHelp={(question) => showAnswer(question.answer)} onAnswer={answerQuestion} onPrevSection={() => setGateStarted(false)} onDone={() => setGateDecision({ mode: "complete", skill: "listen" })} /></div>
       </section>
     );
   }
@@ -1392,9 +1485,10 @@ function BossTravelChallenge({
   if (activeGate === "read") {
     return (
       <section className="boss-challenge-page">
-        <button className="btn ghost boss-back" type="button" onClick={() => setActiveGate(null)}>← 返回 Boss 大廳</button>
-        <BossStageHeader skill="read" current={quizStateFor("read").index} total={bossTravelLesson.read.length} />
-        <QuizTask lesson={bossTravelLesson} skill="read" questions={bossTravelLesson.read} speak={speak} state={quizStateFor("read")} onStateChange={(state) => updateQuizState("read", state)} sectionCompleted={completedSkills.includes("read")} helpUsed={false} onHelp={(question) => showAnswer(question.answer)} onAnswer={answerQuestion} onPrevSection={() => setGateStarted(false)} onDone={() => completeSkill("read")} />
+        {decisionOverlay}
+        <button className="btn ghost boss-back" type="button" onClick={() => setGateDecision({ mode: "exit", skill: "read" })}>← 返回 Boss 大廳</button>
+        <BossStageHeader skill="read" current={quizStateFor("read").index} total={bossTravelLesson.read.length} {...battleMetrics("read")} />
+        <div className="boss-battle-task"><QuizTask lesson={bossTravelLesson} skill="read" questions={bossTravelLesson.read} speak={speak} state={quizStateFor("read")} onStateChange={(state) => updateQuizState("read", state)} sectionCompleted={completedSkills.includes("read")} helpUsed={false} onHelp={(question) => showAnswer(question.answer)} onAnswer={answerQuestion} onPrevSection={() => setGateStarted(false)} onDone={() => setGateDecision({ mode: "complete", skill: "read" })} /></div>
       </section>
     );
   }
@@ -1402,9 +1496,10 @@ function BossTravelChallenge({
   if (activeGate === "speak") {
     return (
       <section className="boss-challenge-page">
-        <button className="btn ghost boss-back" type="button" onClick={() => setActiveGate(null)}>← 返回 Boss 大廳</button>
-        <BossStageHeader skill="speak" current={speakState.index || 0} total={bossTravelLesson.speak.length} />
-        <SpeakTask lesson={bossTravelLesson} speak={speak} state={speakState} onStateChange={updateSpeakState} sectionCompleted={completedSkills.includes("speak")} helpUsed={false} onHelp={showAnswer} onAnswer={answerPractice} onPrevSection={() => setGateStarted(false)} onDone={() => completeSkill("speak")} />
+        {decisionOverlay}
+        <button className="btn ghost boss-back" type="button" onClick={() => setGateDecision({ mode: "exit", skill: "speak" })}>← 返回 Boss 大廳</button>
+        <BossStageHeader skill="speak" current={speakState.index || 0} total={bossTravelLesson.speak.length} {...battleMetrics("speak")} />
+        <div className="boss-battle-task"><SpeakTask lesson={bossTravelLesson} speak={speak} state={speakState} onStateChange={updateSpeakState} sectionCompleted={completedSkills.includes("speak")} helpUsed={false} onHelp={showAnswer} onAnswer={answerPractice} onPrevSection={() => setGateStarted(false)} onDone={() => setGateDecision({ mode: "complete", skill: "speak" })} /></div>
       </section>
     );
   }
@@ -1412,15 +1507,17 @@ function BossTravelChallenge({
   if (activeGate === "write") {
     return (
       <section className="boss-challenge-page">
-        <button className="btn ghost boss-back" type="button" onClick={() => setActiveGate(null)}>← 返回 Boss 大廳</button>
-        <BossStageHeader skill="write" current={writeState.index} total={bossTravelLesson.write.length} />
-        <WriteTask lesson={bossTravelLesson} state={writeState} onStateChange={updateWriteState} sectionCompleted={completedSkills.includes("write")} helpUsed={false} onHelp={showAnswer} onAnswer={answerPractice} onPrevSection={() => setGateStarted(false)} onDone={() => completeSkill("write")} />
+        {decisionOverlay}
+        <button className="btn ghost boss-back" type="button" onClick={() => setGateDecision({ mode: "exit", skill: "write" })}>← 返回 Boss 大廳</button>
+        <BossStageHeader skill="write" current={writeState.index} total={bossTravelLesson.write.length} {...battleMetrics("write")} />
+        <div className="boss-battle-task"><WriteTask lesson={bossTravelLesson} state={writeState} onStateChange={updateWriteState} sectionCompleted={completedSkills.includes("write")} helpUsed={false} onHelp={showAnswer} onAnswer={answerPractice} onPrevSection={() => setGateStarted(false)} onDone={() => setGateDecision({ mode: "complete", skill: "write" })} /></div>
       </section>
     );
   }
 
   return (
     <section className="boss-hub">
+      {decisionOverlay}
       {showCg && <BossCgOverlay seenKey={seenKey} onClose={() => setShowCg(false)} />}
       <div className="boss-hero">
         <div>
@@ -1445,7 +1542,7 @@ function BossTravelChallenge({
           const complete = completedSkills.includes(skill);
           const crownCount = crowns[skill] || 0;
           return (
-            <button className={`boss-gate ${complete ? "complete" : ""}`} type="button" key={skill} onClick={() => setActiveGate(skill)}>
+            <button className={`boss-gate ${complete ? "complete" : ""}`} type="button" key={skill} onClick={() => enterGate(skill)}>
               <span className="boss-gate-number">0{index + 1}</span>
               <span className="boss-gate-icon">{complete ? crownCount ? "👑".repeat(crownCount) : "✓" : meta.icon}</span>
               <strong>{meta.title}</strong>
@@ -1468,16 +1565,44 @@ function BossTravelChallenge({
   );
 }
 
-function BossStageHeader({ skill, current, total }: { skill: Skill; current: number; total: number }) {
+function BossStageHeader({ skill, current, total, correct, wrong }: { skill: Skill; current: number; total: number; correct: number; wrong: number }) {
   const stage = current < Math.ceil(total * .25) ? "暖身" : current < Math.ceil(total * .55) ? "理解" : current < Math.ceil(total * .8) ? "應用" : "Boss 題";
+  const requiredHits = Math.ceil(total * .8);
+  const bossHealth = Math.max(0, Math.round(100 - (correct / requiredHits) * 100));
+  const heroHealth = Math.max(12, 100 - wrong * 18);
+  const battleCopy: Record<Skill, { boss: string; hero: string; action: string; icon: string }> = {
+    listen: { boss: "Echo Wraith", hero: "Sound Ranger", action: "聽清楚關鍵字，發射音波箭！", icon: "🎧" },
+    speak: { boss: "Silence Dragon", hero: "Voice Knight", action: "朗讀越清楚，聲音能量越強！", icon: "🎙️" },
+    read: { boss: "Maze Guardian", hero: "Story Mage", action: "破解文章線索，擊碎守護盾！", icon: "📖" },
+    write: { boss: "Rune Colossus", hero: "Word Commander", action: "寫出正確句子，啟動文字魔法！", icon: "✍️" }
+  };
+  const copy = battleCopy[skill];
   return (
-    <div className="boss-stage-header">
-      <span>{stage}</span>
-      <div>
-        <strong>{skillLabels[skill]}能力挑戰</strong>
-        <small>小關卡 {Math.min(current + 1, total)} / {total}</small>
+    <section className={`boss-battle-arena battle-${skill}`}>
+      {skill === "listen" && <video className="boss-battle-video" autoPlay loop muted playsInline src="/listening-boss-cg.mp4" />}
+      <div className="boss-battle-overlay" />
+      <div className="boss-battle-top">
+        <div className="battle-unit enemy">
+          <div className="battle-name"><span>{copy.icon}</span><div><small>BOSS</small><strong>{copy.boss}</strong></div></div>
+          <div className="battle-health"><span style={{ width: `${bossHealth}%` }} /></div>
+          <small>{bossHealth > 0 ? `HP ${bossHealth}% · 再命中 ${Math.max(requiredHits - correct, 0)} 次` : "BOSS DEFEATED · 皇冠已解鎖"}</small>
+        </div>
+        <div className="battle-round">
+          <span>{stage}</span>
+          <strong>ROUND {Math.min(current + 1, total)} / {total}</strong>
+          <small>{correct} HIT · {wrong} DAMAGE</small>
+        </div>
+        <div className="battle-unit hero-unit">
+          <div className="battle-name"><span>🦉</span><div><small>HERO</small><strong>{copy.hero}</strong></div></div>
+          <div className="battle-health hero-health"><span style={{ width: `${heroHealth}%` }} /></div>
+          <small>{heroHealth > 35 ? "勇氣值充足" : "小心！Boss 正在反擊"}</small>
+        </div>
       </div>
-    </div>
+      <div className="battle-command">
+        <span>{bossHealth <= 0 ? "👑" : wrong > correct ? "🛡️" : "⚔️"}</span>
+        <div><strong>{bossHealth <= 0 ? "Boss 已被擊敗！" : copy.action}</strong><small>答對造成攻擊；達到 80% 正確率即可擊敗 Boss。</small></div>
+      </div>
+    </section>
   );
 }
 
